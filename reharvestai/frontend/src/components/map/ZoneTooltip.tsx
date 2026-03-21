@@ -25,7 +25,7 @@ export default function ZoneTooltip({ fieldId }: ZoneTooltipProps) {
     });
     popupRef.current = popup;
 
-    const handlers: Array<{ layerId: string; enter: () => void; leave: () => void }> = [];
+    const handlers: Array<{ layerId: string; enter: (e: mapboxgl.MapMouseEvent) => void; leave: () => void }> = [];
 
     zones.forEach((zone) => {
       const fillId = `${zone.id}-fill`;

@@ -10,8 +10,9 @@ pool: asyncpg.Pool | None = None
 async def init_db_pool() -> None:
     """Create the asyncpg connection pool.  Called once during app lifespan startup."""
     global pool
+    dsn = settings.DATABASE_URL.replace("postgresql+asyncpg://", "postgresql://")
     pool = await asyncpg.create_pool(
-        dsn=settings.DATABASE_URL,
+        dsn=dsn,
         min_size=2,
         max_size=10,
         command_timeout=30,
