@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import uuid
 from datetime import datetime, timezone
 
@@ -9,6 +10,7 @@ from app import database
 from app.models.field import RecommendationResponse, RecommendationUpdate
 
 router = APIRouter(tags=["recommendations"])
+logger = logging.getLogger("api.recommendations")
 
 
 # ---------------------------------------------------------------------------
@@ -27,17 +29,41 @@ async def get_recommendations(field_id: uuid.UUID) -> list[RecommendationRespons
         rows = await pool.fetch(
             """
             SELECT
-                id, field_id, zone_id, action_type, urgency,
-                reason, confidence, status, created_at
-            FROM recommendations
-            WHERE field_id = $1
-              AND status = 'pending'
-            ORDER BY created_at DESC
+                r.id, r.field_id, r.zone_id, r.action_type, r.urgency,
+                r.reason, r.confidence, r.status, r.created_at,
+                COALESCE(z.label, '') AS zone_label
+            FROM recommendations r
+            LEFT JOIN zones z ON z.id = r.zone_id
+            WHERE r.field_id = $1
+              AND r.status = 'pending'
+            ORDER BY r.created_at DESC
             """,
             field_id,
         )
-    except Exception:
+    except Exception as exc:
+        logger.error("DB error fetching recommendations for %s: %s", field_id, exc)
         raise HTTPException(status_code=500, detail="Failed to fetch recommendations")
+
+    logger.info(
+        "recommendations for field %s → %d pending rows",
+        field_id, len(rows),
+    )
+
+    if not rows:
+        # Check if there are any recommendations at all (any status) so we know why
+        try:
+            pool2 = await database.get_pool()
+            all_rows = await pool2.fetch(
+                "SELECT status, COUNT(*) FROM recommendations WHERE field_id = $1 GROUP BY status",
+                field_id,
+            )
+            if all_rows:
+                summary = {dict(r)["status"]: dict(r)["count"] for r in all_rows}
+                logger.info("  → non-pending recs exist for field %s: %s", field_id, summary)
+            else:
+                logger.info("  → NO recommendations at all for field %s (pipeline hasn't run yet?)", field_id)
+        except Exception:
+            pass
 
     return [_row_to_rec(dict(r)) for r in rows]
 
@@ -60,12 +86,10 @@ async def update_recommendation(
     try:
         row = await pool.fetchrow(
             """
-            UPDATE recommendations
-            SET status = $1
-            WHERE id = $2
-            RETURNING
-                id, field_id, zone_id, action_type, urgency,
-                reason, confidence, status, created_at
+            UPDATE recommendations SET status = $1 WHERE id = $2
+            RETURNING id, field_id, zone_id, action_type, urgency,
+                      reason, confidence, status, created_at,
+                      (SELECT label FROM zones WHERE id = zone_id) AS zone_label
             """,
             body.status,
             recommendation_id,
@@ -91,6 +115,7 @@ def _row_to_rec(row: dict) -> RecommendationResponse:
         id=row["id"],
         field_id=row["field_id"],
         zone_id=row["zone_id"],
+        zone_label=row.get("zone_label") or "",
         action_type=row["action_type"],
         urgency=row["urgency"],
         reason=row["reason"],

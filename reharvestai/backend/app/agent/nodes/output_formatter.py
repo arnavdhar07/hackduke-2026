@@ -14,10 +14,14 @@ task via asyncio.run() — no existing aioredis event loop is available.
 from __future__ import annotations
 
 import json
+import logging
+import uuid
 from datetime import datetime, timezone
 
 import asyncpg
 import redis as redis_sync
+
+logger = logging.getLogger("api.output_formatter")
 
 from app.agent.state import AgentState, RecommendationOutput
 from app.config import settings
@@ -79,6 +83,14 @@ async def output_formatter(state: AgentState) -> AgentState:
     inserted_recommendations = 0
     inserted_alerts = 0
 
+    logger.info("=== output_formatter: field=%s ===", field_id)
+    logger.info("  recommendations (%d):", len(recommendations))
+    for rec in recommendations:
+        logger.info("    [%s] %s — %s (confidence=%.2f): %s",
+                    rec["urgency"], rec.get("zone_label"), rec["action_type"],
+                    rec["confidence"], rec["reason"])
+    logger.info("  reasoning_trace nodes: %s", [e.get("node_name") for e in reasoning_trace])
+
     try:
         async with conn_pool.acquire() as conn:
             async with conn.transaction():
@@ -102,24 +114,27 @@ async def output_formatter(state: AgentState) -> AgentState:
                             _SQL_INSERT_ALERT,
                             field_id,
                             rec["zone_id"],
-                            rec["action_type"],        # type
-                            _alert_message(rec),       # message
-                            "critical",                # severity
+                            rec["action_type"],
+                            _alert_message(rec),
+                            "critical",
                         )
                         inserted_alerts += 1
+
+                # 4. Insert agent trace (same transaction, before pool closes)
+                await conn.execute(
+                    """
+                    INSERT INTO agent_traces (id, field_id, run_at, trace)
+                    VALUES ($1, $2, now(), $3)
+                    """,
+                    uuid.uuid4(),
+                    uuid.UUID(field_id),
+                    json.dumps(reasoning_trace),
+                )
+                logger.info("output_formatter: wrote trace (%d nodes) for field %s", len(reasoning_trace), field_id)
 
     finally:
         if _own_pool:
             await conn_pool.close()
-
-    # 4. Insert agent trace via Person 3's db_writer (owns that table)
-    try:
-        from pipeline.db_writer import write_agent_trace
-        from app.database import pool as _pool2
-        trace_pool = _pool2 or conn_pool
-        await write_agent_trace(trace_pool, field_id, {"nodes": reasoning_trace})
-    except Exception:
-        pass  # non-fatal — recommendations are already written
 
     # 2. Invalidate Redis cache (sync redis-py client — safe from Celery context)
     try:

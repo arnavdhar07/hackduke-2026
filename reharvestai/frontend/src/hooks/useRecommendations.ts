@@ -33,7 +33,9 @@ export function useRecommendations(fieldId: string) {
       return data;
     },
     enabled: !!fieldId,
-    refetchInterval: 60_000,
+    // Poll every 3s until we have results (pipeline takes ~5s), then every 60s.
+    refetchInterval: (query) =>
+      (query.state.data?.length ?? 0) === 0 ? 3_000 : 60_000,
   });
 
   const clearToast = useCallback(() => setCriticalToast(null), []);

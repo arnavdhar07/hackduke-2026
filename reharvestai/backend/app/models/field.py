@@ -64,6 +64,7 @@ class RecommendationResponse(BaseModel):
     id: uuid.UUID
     field_id: uuid.UUID
     zone_id: uuid.UUID
+    zone_label: str = ""
     action_type: str   # harvest | irrigate | monitor | inspect
     urgency: str       # low | medium | high | critical
     reason: str

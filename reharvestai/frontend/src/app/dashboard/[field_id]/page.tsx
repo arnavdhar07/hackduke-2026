@@ -6,11 +6,10 @@ import dynamic from 'next/dynamic';
 import { getField } from '@/lib/api';
 import { useZones } from '@/hooks/useZones';
 import { useRecommendations } from '@/hooks/useRecommendations';
-import type { Field, Zone, Recommendation } from '@/types/api';
+import type { Field, Zone } from '@/types/api';
 import { DEFAULT_CENTER, DEFAULT_ZOOM } from '@/lib/mapbox';
 import ActionQueue from '@/app/sidebar/ActionQueue';
 import ZoneDetailPanel from '@/app/panels/ZoneDetailPanel';
-import AgentTraceModal from '@/app/sidebar/AgentTraceModal';
 import Toast from '@/app/ui/Toast';
 
 const FieldMap = dynamic(() => import('@/components/map/FieldMap'), { ssr: false });
@@ -22,7 +21,6 @@ export default function DashboardPage() {
   const { field_id } = useParams<{ field_id: string }>();
   const [field, setField] = useState<Field | null>(null);
   const [selectedZone, setSelectedZone] = useState<Zone | null>(null);
-  const [activeRec, setActiveRec] = useState<Recommendation | null>(null);
 
   const { data: zones = [] } = useZones(field_id);
   const { recommendations, criticalToast, clearToast } = useRecommendations(field_id);
@@ -63,18 +61,13 @@ export default function DashboardPage() {
         </div>
 
         {/* Action queue */}
-        <ActionQueue fieldId={field_id} onWhyClick={setActiveRec} />
+        <ActionQueue fieldId={field_id} />
 
         {/* Zone detail panel */}
         {selectedZone && (
           <ZoneDetailPanel zone={selectedZone} onClose={() => setSelectedZone(null)} />
         )}
       </div>
-
-      {/* Agent trace modal */}
-      {activeRec && (
-        <AgentTraceModal fieldId={field_id} onClose={() => setActiveRec(null)} />
-      )}
 
       {/* Critical toast */}
       {criticalToast && (

@@ -14,10 +14,9 @@ const URGENCY_WEIGHT: Record<Recommendation['urgency'], number> = {
 
 interface ActionQueueProps {
   fieldId: string;
-  onWhyClick: (rec: Recommendation) => void;
 }
 
-export default function ActionQueue({ fieldId, onWhyClick }: ActionQueueProps) {
+export default function ActionQueue({ fieldId }: ActionQueueProps) {
   const { recommendations, isLoading, isError } = useRecommendations(fieldId);
 
   const sorted = [...recommendations].sort(
@@ -55,7 +54,6 @@ export default function ActionQueue({ fieldId, onWhyClick }: ActionQueueProps) {
             key={rec.id}
             recommendation={rec}
             fieldId={fieldId}
-            onWhyClick={onWhyClick}
           />
         ))}
 
@@ -67,7 +65,6 @@ export default function ActionQueue({ fieldId, onWhyClick }: ActionQueueProps) {
                 <RecommendationCard
                   recommendation={rec}
                   fieldId={fieldId}
-                  onWhyClick={onWhyClick}
                 />
               </div>
             ))}

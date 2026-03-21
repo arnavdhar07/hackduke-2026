@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import uuid
 
 from fastapi import APIRouter, HTTPException
@@ -10,6 +11,7 @@ from app.redis import get_redis
 from app.models.field import GeoJSON, ZoneResponse, ZoneScore
 
 router = APIRouter(tags=["zones"])
+logger = logging.getLogger("api.zones")
 
 _CACHE_TTL = 3600  # seconds
 
@@ -33,6 +35,7 @@ async def get_zones(field_id: uuid.UUID) -> list[ZoneResponse]:
         cached = await redis.get(cache_key)
         if cached:
             raw_list: list[dict] = json.loads(cached)
+            logger.info("zones for field %s → %d (cache hit)", field_id_str, len(raw_list))
             return [ZoneResponse.model_validate(z) for z in raw_list]
     except RuntimeError:
         # Redis not available — skip cache, fall through to DB
@@ -41,6 +44,9 @@ async def get_zones(field_id: uuid.UUID) -> list[ZoneResponse]:
 
     # ── DB query ────────────────────────────────────────────────────────────
     zones = await _get_zones_from_db(field_id)
+    logger.info("zones for field %s → %d (db hit)", field_id_str, len(zones))
+    if not zones:
+        logger.info("  → no zones for field %s (pipeline hasn't segmented this field yet)", field_id_str)
 
     # ── Cache write ─────────────────────────────────────────────────────────
     if redis is not None and zones:

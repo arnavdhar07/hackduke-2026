@@ -1,10 +1,15 @@
 from __future__ import annotations
 
+import logging
+import time
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+
+logging.basicConfig(level=logging.INFO, format="%(levelname)s  %(name)s  %(message)s")
+logger = logging.getLogger("api")
 
 from app import database
 from app import redis as redis_module
@@ -39,6 +44,19 @@ app = FastAPI(
     version="1.0.0",
     lifespan=lifespan,
 )
+
+# ── Request/response logger ─────────────────────────────────────────────────
+@app.middleware("http")
+async def log_requests(request: Request, call_next):
+    start = time.perf_counter()
+    response = await call_next(request)
+    ms = (time.perf_counter() - start) * 1000
+    logger.info(
+        "%s %s → %d  (%.0fms)",
+        request.method, request.url.path, response.status_code, ms,
+    )
+    return response
+
 
 # ── CORS (hackathon demo — allow everything) ────────────────────────────────
 app.add_middleware(

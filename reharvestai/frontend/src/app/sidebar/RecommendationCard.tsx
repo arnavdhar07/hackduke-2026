@@ -17,10 +17,9 @@ const ACTION_COLOR: Record<Recommendation['action_type'], string> = {
 interface RecommendationCardProps {
   recommendation: Recommendation;
   fieldId: string;
-  onWhyClick: (rec: Recommendation) => void;
 }
 
-export default function RecommendationCard({ recommendation: rec, fieldId, onWhyClick }: RecommendationCardProps) {
+export default function RecommendationCard({ recommendation: rec, fieldId }: RecommendationCardProps) {
   const queryClient = useQueryClient();
   const [loading, setLoading] = useState<string | null>(null);
 
@@ -90,12 +89,6 @@ export default function RecommendationCard({ recommendation: rec, fieldId, onWhy
           className="flex-1 text-xs font-medium bg-gray-700 hover:bg-gray-600 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-lg py-1.5 transition-colors"
         >
           {loading === 'dismissed' ? '…' : 'Dismiss'}
-        </button>
-        <button
-          onClick={() => onWhyClick(rec)}
-          className="text-xs font-medium text-blue-400 hover:text-blue-300 px-2 transition-colors"
-        >
-          Why?
         </button>
       </div>
     </div>

@@ -4,10 +4,11 @@ import json
 import uuid
 from datetime import date, datetime, timezone
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, BackgroundTasks, HTTPException
 
 from app import database
 from app.models.field import FieldCreate, FieldResponse, GeoJSON
+from app.synthetic_pipeline import run_synthetic_pipeline
 
 router = APIRouter(prefix="/fields", tags=["fields"])
 
@@ -18,7 +19,7 @@ router = APIRouter(prefix="/fields", tags=["fields"])
 # ---------------------------------------------------------------------------
 
 @router.post("", response_model=FieldResponse, status_code=201)
-async def create_field(body: FieldCreate) -> FieldResponse:
+async def create_field(body: FieldCreate, background_tasks: BackgroundTasks) -> FieldResponse:
     """Insert a new field polygon into the database and return the persisted row."""
     pool = await database.get_pool()
 
@@ -50,7 +51,9 @@ async def create_field(body: FieldCreate) -> FieldResponse:
     if row is None:
         raise HTTPException(status_code=500, detail="Insert returned no row")
 
-    return _row_to_field_response(dict(row))
+    field_response = _row_to_field_response(dict(row))
+    background_tasks.add_task(run_synthetic_pipeline, str(field_response.id))
+    return field_response
 
 
 # ---------------------------------------------------------------------------

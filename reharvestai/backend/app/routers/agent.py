@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import uuid
 from datetime import datetime, timezone
 
@@ -9,6 +10,7 @@ from app import database
 from app.models.field import AgentTraceNodeEntry, AgentTraceResponse
 
 router = APIRouter(tags=["agent"])
+logger = logging.getLogger("api.agent")
 
 
 # ---------------------------------------------------------------------------
@@ -42,6 +44,7 @@ async def get_agent_trace(field_id: uuid.UUID) -> AgentTraceResponse:
         raise HTTPException(status_code=500, detail="Failed to fetch agent trace")
 
     if row is None:
+        logger.warning("agent/trace: no row in agent_traces for field %s", field_id)
         raise HTTPException(
             status_code=404,
             detail=f"No agent trace found for field {field_id}",
@@ -51,12 +54,15 @@ async def get_agent_trace(field_id: uuid.UUID) -> AgentTraceResponse:
 
     # trace is jsonb — asyncpg decodes it to list[dict] automatically
     raw_trace = r["trace"]
-    if not isinstance(raw_trace, list):
-        raw_trace = []
+    logger.info("agent/trace: field=%s raw_trace type=%s len=%s",
+                field_id, type(raw_trace).__name__,
+                len(raw_trace) if isinstance(raw_trace, (list, dict)) else "?")
+    logger.info("agent/trace: raw content: %s", raw_trace)
 
-    # Handle both storage shapes: flat list of nodes, or {"nodes": [...]}
     if isinstance(raw_trace, dict):
         raw_trace = raw_trace.get("nodes", [])
+    if not isinstance(raw_trace, list):
+        raw_trace = []
 
     trace_entries = [
         AgentTraceNodeEntry(

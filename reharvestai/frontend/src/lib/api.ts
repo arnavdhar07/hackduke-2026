@@ -1,8 +1,8 @@
 import type { Field, Zone, Recommendation, AgentTrace } from "@/types/api";
 import type { Polygon } from "geojson";
 
-const MOCK_MODE = true;
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+const MOCK_MODE = false;
+const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000/api/v1";
 
 // ─── Mock state (persists across calls within a session) ──────────────────────
 
@@ -199,11 +199,15 @@ function seedDefault() {
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`${API_BASE}${path}`, {
+  const url = `${API_BASE}${path}`;
+  const res = await fetch(url, {
     headers: { "Content-Type": "application/json" },
     ...init,
   });
-  if (!res.ok) throw new Error(`API error ${res.status}: ${path}`);
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`API error ${res.status}: ${path} — ${text}`);
+  }
   return res.json() as Promise<T>;
 }
 
@@ -218,7 +222,8 @@ export async function createField(body: Omit<Field, "id">): Promise<Field> {
     mockRecommendations = generateRecommendations(field, zones);
     return field;
   }
-  return apiFetch<Field>("/fields", { method: "POST", body: JSON.stringify(body) });
+  const payload = { ...body, farmer_id: "00000000-0000-0000-0000-000000000001" };
+  return apiFetch<Field>("/fields", { method: "POST", body: JSON.stringify(payload) });
 }
 
 export async function getField(fieldId: string): Promise<Field> {
