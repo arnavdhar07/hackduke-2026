@@ -1,0 +1,49 @@
+services:
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    env_file: .env
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend:/app
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    command: celery -A pipeline.celery_app.celery_app worker --loglevel=info --concurrency=2
+    env_file: .env
+    volumes:
+      - ./backend:/app
+      - ./models:/models
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  beat:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    command: celery -A pipeline.celery_app.celery_app beat --loglevel=info --schedule=/tmp/celerybeat-schedule
+    env_file: .env
+    volumes:
+      - ./backend:/app
+    depends_on:
+      - worker
+
