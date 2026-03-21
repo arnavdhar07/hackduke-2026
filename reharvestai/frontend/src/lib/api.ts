@@ -1,4 +1,4 @@
-import type { Field, Zone, Recommendation, AgentTrace } from "@/types/api";
+import type { Field, Zone, Recommendation, AgentTrace, WeatherForecast } from "@/types/api";
 import type { Polygon } from "geojson";
 
 const MOCK_MODE = true;
@@ -185,10 +185,11 @@ function seedDefault() {
     id: "field-001",
     name: "Thornfield Farm",
     crop_type: "corn",
-    planting_date: "2026-04-15",
+    planting_date: "2025-12-10",
     polygon: {
       type: "Polygon",
-      coordinates: [[[-78.9, 36.0], [-78.88, 36.0], [-78.88, 36.015], [-78.9, 36.015], [-78.9, 36.0]]],
+      // Chatham County NC — tighter crop field near Old Goldston Rd
+      coordinates: [[[-79.2053, 35.7188], [-79.2028, 35.7188], [-79.2028, 35.7206], [-79.2053, 35.7206], [-79.2053, 35.7188]]],
     },
   };
   mockField = field;
@@ -248,6 +249,20 @@ export async function patchRecommendation(id: string, status: Recommendation["st
     method: "PATCH",
     body: JSON.stringify({ status }),
   });
+}
+
+export async function getWeatherForecast(fieldId: string): Promise<WeatherForecast> {
+  if (MOCK_MODE) {
+    return {
+      field_id: fieldId,
+      days: [
+        { date: "2026-03-21", temp_high_c: 24, temp_low_c: 13, precip_mm: 0,  condition: "clear",  wind_kph: 11 },
+        { date: "2026-03-22", temp_high_c: 21, temp_low_c: 14, precip_mm: 6,  condition: "cloudy", wind_kph: 18 },
+        { date: "2026-03-23", temp_high_c: 17, temp_low_c: 12, precip_mm: 28, condition: "rain",   wind_kph: 24 },
+      ],
+    };
+  }
+  return apiFetch<WeatherForecast>(`/fields/${fieldId}/weather`);
 }
 
 export async function getAgentTrace(fieldId: string): Promise<AgentTrace> {

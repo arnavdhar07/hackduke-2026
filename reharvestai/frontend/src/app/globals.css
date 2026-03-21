@@ -1,3 +1,56 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+.database {
+  offset-anchor: 10px 0px;
+  animation: database-animation-path;
+  animation-iteration-count: infinite;
+  animation-timing-function: cubic-bezier(0, 0, 0.2, 1);
+  animation-duration: 4s;
+  animation-delay: 1s;
+}
+
+.db-light-1 {
+  offset-path: path("M 28 18 v 13 q 0 5 5 5 h 62 q 5 0 5 5 v 28");
+}
+
+.db-light-2 {
+  offset-path: path("M 78 18 v 8 q 0 5 5 5 h 12 q 5 0 5 5 v 28");
+}
+
+.db-light-3 {
+  offset-path: path("M 125 18 v 8 q 0 5 -5 5 h -14 q -5 0 -5 5 v 28");
+}
+
+.db-light-4 {
+  offset-path: path("M 172 18 v 13 q 0 5 -5 5 h -62 q -5 0 -5 5 v 28");
+}
+
+@keyframes database-animation-path {
+  0% { offset-distance: 0%; }
+  100% { offset-distance: 100%; }
+}
+
+@layer base {
+  :root {
+    --muted: oklch(0.97 0 0);
+    --muted-foreground: oklch(0.556 0 0);
+    --border: oklch(0.922 0 0);
+    --ring: oklch(0.708 0 0);
+    --background: oklch(1 0 0);
+    --foreground: oklch(0.145 0 0);
+    --accent: oklch(0.97 0 0);
+    --accent-foreground: oklch(0.205 0 0);
+  }
+  .dark {
+    --muted: oklch(0.269 0 0);
+    --muted-foreground: oklch(0.708 0 0);
+    --border: oklch(1 0 0 / 10%);
+    --ring: oklch(0.556 0 0);
+    --background: oklch(0.145 0 0);
+    --foreground: oklch(0.985 0 0);
+    --accent: oklch(0.269 0 0);
+    --accent-foreground: oklch(0.985 0 0);
+  }
+}
