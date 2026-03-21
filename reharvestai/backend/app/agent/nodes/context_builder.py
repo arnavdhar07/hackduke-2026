@@ -101,7 +101,7 @@ async def context_builder(state: AgentState) -> AgentState:
     if _pool is None:
         # Celery path: create a short-lived pool for this invocation
         conn_pool: asyncpg.Pool = await asyncpg.create_pool(
-            dsn=settings.database_url,
+            dsn=settings.DATABASE_URL,
             min_size=1,
             max_size=3,
             command_timeout=30,

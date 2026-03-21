@@ -39,12 +39,6 @@ _SQL_INSERT_ALERT = """
     VALUES ($1, $2, $3, $4, $5)
 """
 
-_SQL_INSERT_TRACE = """
-    INSERT INTO agent_traces (field_id, trace)
-    VALUES ($1, $2::jsonb)
-"""
-
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -72,7 +66,7 @@ async def output_formatter(state: AgentState) -> AgentState:
 
     if _pool is None:
         conn_pool: asyncpg.Pool = await asyncpg.create_pool(
-            dsn=settings.database_url,
+            dsn=settings.DATABASE_URL,
             min_size=1,
             max_size=3,
             command_timeout=30,
@@ -114,20 +108,22 @@ async def output_formatter(state: AgentState) -> AgentState:
                         )
                         inserted_alerts += 1
 
-                # 4. Insert agent trace
-                trace_json: str = json.dumps(reasoning_trace)
-                await conn.execute(
-                    _SQL_INSERT_TRACE,
-                    field_id,
-                    trace_json,
-                )
     finally:
         if _own_pool:
             await conn_pool.close()
 
+    # 4. Insert agent trace via Person 3's db_writer (owns that table)
+    try:
+        from pipeline.db_writer import write_agent_trace
+        from app.database import pool as _pool2
+        trace_pool = _pool2 or conn_pool
+        await write_agent_trace(trace_pool, field_id, {"nodes": reasoning_trace})
+    except Exception:
+        pass  # non-fatal — recommendations are already written
+
     # 2. Invalidate Redis cache (sync redis-py client — safe from Celery context)
     try:
-        r = redis_sync.from_url(settings.redis_url, decode_responses=True)
+        r = redis_sync.from_url(settings.REDIS_URL, decode_responses=True)
         r.delete(f"zone_scores:{field_id}")
         r.close()
         cache_invalidated = True

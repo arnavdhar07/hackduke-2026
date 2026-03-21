@@ -114,7 +114,7 @@ def _build_user_message(state: AgentState) -> str:
 
 async def zone_classifier(state: AgentState) -> AgentState:
     """Classify each zone's harvest readiness using Claude tool_use."""
-    client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
+    client = anthropic.Anthropic(api_key=settings.ANTHROPIC_API_KEY)
 
     user_message = _build_user_message(state)
 

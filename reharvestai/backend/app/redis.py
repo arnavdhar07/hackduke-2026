@@ -12,7 +12,7 @@ async def init_redis() -> None:
     """Create the async Redis client. Called once during app lifespan startup."""
     global redis_client
     redis_client = await redis_from_url(
-        settings.redis_url,
+        settings.REDIS_URL,
         decode_responses=True,
         encoding="utf-8",
     )

@@ -1,32 +1,38 @@
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pathlib import Path
+
+from pydantic_settings import BaseSettings
+
+# Walk up from backend/app/config.py to find .env at the project root.
+_HERE = Path(__file__).resolve().parent        # backend/app/
+_ENV_FILE = _HERE.parent.parent / ".env"       # reharvestai/.env
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(
-        env_file=["../.env", ".env"],  # works from both backend/ and reharvestai/
-        env_file_encoding="utf-8",
-        extra="ignore",
-    )
+    # ── Database ──────────────────────────────────────────────────────────────
+    DATABASE_URL: str
 
-    # Database (Supabase PostgreSQL)
-    database_url: str = "postgresql://postgres:password@db.kdsgnodshdzulpupvlka.supabase.co:5432/postgres"
+    # ── Redis / Celery ────────────────────────────────────────────────────────
+    # Person 3's celery_app.py derives broker + backend from REDIS_URL directly.
+    REDIS_URL: str = "redis://localhost:6379/0"
 
-    # Redis
-    redis_url: str = "redis://localhost:6379/0"
-    celery_broker_url: str = "redis://localhost:6379/1"
-    celery_result_backend: str = "redis://localhost:6379/2"
+    # ── AI Agent (Person 2) ───────────────────────────────────────────────────
+    ANTHROPIC_API_KEY: str = ""
 
-    # Anthropic
-    anthropic_api_key: str = ""
+    # ── Satellite pipeline (Person 3) ─────────────────────────────────────────
+    CDSE_CLIENT_ID: str = ""
+    CDSE_CLIENT_SECRET: str = ""
+    SAM3_CHECKPOINT_PATH: str = "/models/sam3_vit_h.pth"
+    SAM3_MODEL_TYPE: str = "vit_h"
+    SENTINEL_MAX_CLOUD_PCT: float = 30.0
+    SENTINEL_LOOKBACK_DAYS: int = 10
+    PIPELINE_USE_SYNTHETIC: bool = True   # True = use synthetic data (no real satellite needed)
 
-    # Copernicus / Sentinel-2
-    copernicus_user: str = ""
-    copernicus_password: str = ""
-    use_mock_satellite: bool = True  # set False to use real Sentinel-2 data
+    # ── App ───────────────────────────────────────────────────────────────────
+    SECRET_KEY: str = "changeme"
+    LOG_LEVEL: str = "INFO"
+    CORS_ORIGINS: str = "*"
 
-    # App
-    app_env: str = "development"
-    cors_origins: str = "*"
+    model_config = {"env_file": str(_ENV_FILE), "env_file_encoding": "utf-8", "extra": "ignore"}
 
 
 settings = Settings()

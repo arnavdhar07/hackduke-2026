@@ -11,7 +11,7 @@ async def init_db_pool() -> None:
     """Create the asyncpg connection pool.  Called once during app lifespan startup."""
     global pool
     pool = await asyncpg.create_pool(
-        dsn=settings.database_url,
+        dsn=settings.DATABASE_URL,
         min_size=2,
         max_size=10,
         command_timeout=30,
