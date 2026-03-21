@@ -52,3 +52,23 @@ export interface AgentTrace {
   run_at: string;
   nodes: AgentNode[];
 }
+
+// ─── Weather forecast — GET /fields/{field_id}/weather ───────────────────────
+// Person 2 implements this endpoint via OpenWeather API.
+// Shape mirrors OpenWeather daily forecast, simplified to what the UI needs.
+
+export type WeatherCondition = "clear" | "cloudy" | "rain" | "storm";
+
+export interface WeatherDay {
+  date: string;          // YYYY-MM-DD
+  temp_high_c: number;
+  temp_low_c: number;
+  precip_mm: number;
+  condition: WeatherCondition;
+  wind_kph: number;
+}
+
+export interface WeatherForecast {
+  field_id: string;
+  days: WeatherDay[];    // 3 days
+}

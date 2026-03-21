@@ -8,7 +8,10 @@ import { useZones } from '@/hooks/useZones';
 import { useRecommendations } from '@/hooks/useRecommendations';
 import type { Field, Zone } from '@/types/api';
 import { DEFAULT_CENTER, DEFAULT_ZOOM } from '@/lib/mapbox';
+import { ndviColor } from '@/lib/colors';
+import { Progress, ProgressTrack, ProgressIndicator } from '@/components/ui/progress';
 import ActionQueue from '@/app/sidebar/ActionQueue';
+import ZoneSparklines from '@/app/ui/ZoneSparklines';
 import ZoneDetailPanel from '@/app/panels/ZoneDetailPanel';
 import Toast from '@/app/ui/Toast';
 
@@ -16,6 +19,151 @@ const FieldMap = dynamic(() => import('@/components/map/FieldMap'), { ssr: false
 const ZoneLayer = dynamic(() => import('@/components/map/ZoneLayer'), { ssr: false });
 const ZoneTooltip = dynamic(() => import('@/components/map/ZoneTooltip'), { ssr: false });
 const UrgencyPulse = dynamic(() => import('@/components/map/UrgencyPulse'), { ssr: false });
+
+// ─── Crop growth config ───────────────────────────────────────────────────────
+
+const CROP_DAYS: Record<string, number> = {
+  corn: 120, wheat: 100, soy: 130, cotton: 170, rice: 110,
+};
+
+const GROWTH_STAGES = [
+  { label: 'Planted',  pct: 0 },
+  { label: 'Growing',  pct: 0.2 },
+  { label: 'Filling',  pct: 0.55 },
+  { label: 'Harvest',  pct: 0.8 },
+  { label: 'Past peak',pct: 1.0 },
+];
+
+function getSeasonProgress(plantingDate: string, cropType: string) {
+  const totalDays = CROP_DAYS[cropType] ?? 120;
+  const daysElapsed = Math.floor((Date.now() - new Date(plantingDate).getTime()) / 86_400_000);
+  const pct = Math.min(1, Math.max(0, daysElapsed / totalDays));
+  const stageIdx = GROWTH_STAGES.findLastIndex((s) => pct >= s.pct);
+  return { pct, stage: GROWTH_STAGES[Math.max(0, stageIdx)].label, daysElapsed, totalDays };
+}
+
+// ─── Field health donut (pure SVG) ───────────────────────────────────────────
+
+function FieldHealthDonut({ zones }: { zones: Zone[] }) {
+  if (!zones.length) return null;
+  const bands = [
+    { color: '#16a34a', count: zones.filter(z => z.latest_scores.ndvi >= 80).length },
+    { color: '#84cc16', count: zones.filter(z => z.latest_scores.ndvi >= 65 && z.latest_scores.ndvi < 80).length },
+    { color: '#f59e0b', count: zones.filter(z => z.latest_scores.ndvi >= 40 && z.latest_scores.ndvi < 65).length },
+    { color: '#ef4444', count: zones.filter(z => z.latest_scores.ndvi < 40).length },
+  ].filter(b => b.count > 0);
+
+  const total = zones.length;
+  const R = 17, r = 10, cx = 20, cy = 20;
+  let angle = -Math.PI / 2;
+  const arcs = bands.map((b, i) => {
+    const sweep = (b.count / total) * 2 * Math.PI;
+    const end = angle + sweep;
+    const large = sweep > Math.PI ? 1 : 0;
+    const x1 = cx + R * Math.cos(angle), y1 = cy + R * Math.sin(angle);
+    const x2 = cx + R * Math.cos(end),   y2 = cy + R * Math.sin(end);
+    const ix1 = cx + r * Math.cos(angle), iy1 = cy + r * Math.sin(angle);
+    const ix2 = cx + r * Math.cos(end),   iy2 = cy + r * Math.sin(end);
+    const d = `M${x1} ${y1} A${R} ${R} 0 ${large} 1 ${x2} ${y2} L${ix2} ${iy2} A${r} ${r} 0 ${large} 0 ${ix1} ${iy1}Z`;
+    angle = end;
+    return <path key={i} d={d} fill={b.color} />;
+  });
+
+  return (
+    <svg width="40" height="40" viewBox="0 0 40 40" title="Zone health breakdown">
+      {arcs}
+      <circle cx={cx} cy={cy} r={r - 1} fill="#0f1117" />
+      <text x={cx} y={cy + 1} textAnchor="middle" dominantBaseline="middle" fontSize="8" fill="white" fontWeight="bold">{total}</text>
+    </svg>
+  );
+}
+
+// ─── Inline stat pill for the top bar ────────────────────────────────────────
+
+function StatPill({
+  label,
+  value,
+  accent,
+  critical,
+}: {
+  label: string;
+  value: string | number;
+  accent?: string;
+  critical?: boolean;
+}) {
+  return (
+    <div className={`flex flex-col items-center px-3 py-1 rounded-lg border ${
+      critical ? 'bg-red-950/20 border-red-500/20' : 'border-[#2a3045] bg-[#1a1f2e]'
+    }`}>
+      <span className={`text-base font-bold leading-none ${accent ?? 'text-white'}`}>{value}</span>
+      <span className="text-[10px] text-gray-400 mt-0.5 whitespace-nowrap">{label}</span>
+    </div>
+  );
+}
+
+// ─── Export report ────────────────────────────────────────────────────────────
+
+function exportReport(field: Field, zones: Zone[], recommendations: Recommendation[]) {
+  const accepted = recommendations.filter(r => r.status === 'accepted');
+  const critical = recommendations.filter(r => r.urgency === 'critical');
+  const avgNdvi = zones.length
+    ? Math.round(zones.reduce((s, z) => s + z.latest_scores.ndvi, 0) / zones.length)
+    : 'N/A';
+
+  const html = `<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>ReHarvestAI Field Report — ${field.name}</title>
+<style>
+  body { font-family: system-ui, sans-serif; max-width: 720px; margin: 40px auto; color: #111; }
+  h1 { color: #16a34a; } h2 { border-bottom: 1px solid #e5e7eb; padding-bottom: 8px; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th { text-align: left; background: #f3f4f6; padding: 6px 10px; }
+  td { padding: 6px 10px; border-bottom: 1px solid #f3f4f6; }
+  .badge { display:inline-block; padding:2px 8px; border-radius:9999px; font-size:11px; font-weight:600; }
+  .critical { background:#fee2e2; color:#991b1b; }
+  .high { background:#ffedd5; color:#9a3412; }
+  .medium { background:#dbeafe; color:#1e40af; }
+  .low { background:#f3f4f6; color:#374151; }
+  footer { margin-top:40px; font-size:11px; color:#9ca3af; }
+</style></head><body>
+<h1>ReHarvestAI — Field Report</h1>
+<p><strong>Field:</strong> ${field.name} &nbsp;|&nbsp; <strong>Crop:</strong> ${field.crop_type} &nbsp;|&nbsp;
+<strong>Planted:</strong> ${new Date(field.planting_date).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })} &nbsp;|&nbsp;
+<strong>Report date:</strong> ${new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}</p>
+
+<h2>Field Summary</h2>
+<table><tr><th>Metric</th><th>Value</th></tr>
+<tr><td>Total zones</td><td>${zones.length}</td></tr>
+<tr><td>Average NDVI</td><td>${avgNdvi}</td></tr>
+<tr><td>Critical zones</td><td>${critical.length}</td></tr>
+<tr><td>Recommendations accepted</td><td>${accepted.length}</td></tr>
+</table>
+
+<h2>Zone Health</h2>
+<table><tr><th>Zone</th><th>NDVI</th><th>NDWI</th><th>NDRE</th><th>Captured</th></tr>
+${zones.map(z => `<tr><td>${z.label}</td><td>${z.latest_scores.ndvi}</td><td>${z.latest_scores.ndwi}</td><td>${z.latest_scores.ndre}</td>
+<td>${new Date(z.latest_scores.captured_at).toLocaleDateString()}</td></tr>`).join('')}
+</table>
+
+<h2>Recommendations</h2>
+<table><tr><th>Zone</th><th>Action</th><th>Urgency</th><th>Confidence</th><th>Status</th></tr>
+${recommendations.map(r => `<tr><td>${r.zone_label}</td><td>${r.action_type}</td>
+<td><span class="badge ${r.urgency}">${r.urgency}</span></td>
+<td>${Math.round(r.confidence * 100)}%</td><td>${r.status}</td></tr>`).join('')}
+</table>
+
+<footer>Generated by ReHarvestAI · ${new Date().toISOString()}</footer>
+</body></html>`;
+
+  const blob = new Blob([html], { type: 'text/html' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `reharvestai-report-${field.name.toLowerCase().replace(/\s+/g, '-')}.html`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+// ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function DashboardPage() {
   const { field_id } = useParams<{ field_id: string }>();
@@ -34,39 +182,160 @@ export default function DashboardPage() {
     ? (field.polygon.coordinates[0][0] as [number, number])
     : DEFAULT_CENTER;
 
+  // ── Computed header stats ─────────────────────────────────────────────────
+  const criticalCount = recommendations.filter(r => r.urgency === 'critical' && r.status === 'pending').length;
+  const avgNdvi = zones.length
+    ? Math.round(zones.reduce((s, z) => s + z.latest_scores.ndvi, 0) / zones.length)
+    : null;
+  const daysSincePass = zones.length
+    ? Math.floor((Date.now() - new Date(zones[0].latest_scores.captured_at).getTime()) / 86_400_000)
+    : null;
+
+  // Waste reduction: accepted recs × rough tonnes saved per action
+  const acceptedCount = recommendations.filter(r => r.status === 'accepted').length;
+  const estTonnesSaved = +(acceptedCount * 3.2).toFixed(1);
+
+  // Season progress
+  const season = field ? getSeasonProgress(field.planting_date, field.crop_type) : null;
+
+  // Milestone markers for season progress
+  const MILESTONES = [
+    { label: 'Planted', pos: 0 },
+    { label: 'Growing', pos: 33 },
+    { label: 'Filling', pos: 66 },
+    { label: 'Harvest', pos: 100 },
+  ];
+
   return (
-    <div className="flex flex-col md:flex-row h-screen w-screen overflow-hidden bg-gray-950">
-      {/* Map — 65% on desktop, full width on mobile */}
-      <div className="w-full h-[50vh] md:h-screen md:w-[65%] relative">
-        <FieldMap center={center} zoom={DEFAULT_ZOOM}>
-          <ZoneLayer fieldId={field_id} onZoneSelect={setSelectedZone} />
-          <ZoneTooltip fieldId={field_id} />
-          <UrgencyPulse recommendations={recommendations} zones={zones} />
-        </FieldMap>
+    <div className="flex flex-col h-screen w-screen overflow-hidden bg-gray-950">
+
+      {/* ── Full-width top bar ──────────────────────────────────────────────── */}
+      <div className="shrink-0 border-b border-[#2a3045] px-4 py-2.5" style={{ backgroundColor: '#0d1117' }}>
+        <div className="flex items-center justify-center gap-3">
+
+          {/* Farm identity */}
+          <div className="flex items-center gap-3 shrink-0">
+            <FieldHealthDonut zones={zones} />
+            <div>
+              <h1 className="text-base font-bold text-white leading-tight flex items-center gap-1.5">
+                <span className="text-green-400">●</span>
+                {field ? field.name : 'Loading…'}
+              </h1>
+              {field && (
+                <p className="text-xs text-gray-400">
+                  {zones.length} zones · {field.crop_type.charAt(0).toUpperCase() + field.crop_type.slice(1)}
+                </p>
+              )}
+            </div>
+          </div>
+
+          <div className="w-px h-10 bg-[#2a3045] shrink-0" />
+
+          {/* Stat pills */}
+          <div className="flex items-center gap-2 shrink-0">
+            <StatPill label="Zones" value={zones.length || '—'} />
+            <StatPill
+              label="Critical"
+              value={criticalCount}
+              accent={criticalCount > 0 ? 'text-red-400' : 'text-white'}
+              critical={criticalCount > 0}
+            />
+            <StatPill
+              label="Avg NDVI"
+              value={avgNdvi ?? '—'}
+              accent={
+                avgNdvi === null ? 'text-white'
+                  : avgNdvi < 40 ? 'text-red-400'
+                  : avgNdvi < 65 ? 'text-amber-400'
+                  : avgNdvi < 80 ? 'text-lime-400'
+                  : 'text-green-400'
+              }
+            />
+            <StatPill
+              label="Last Pass"
+              value={daysSincePass !== null ? `${daysSincePass}d` : '—'}
+              accent={daysSincePass !== null && daysSincePass > 4 ? 'text-amber-400' : 'text-gray-300'}
+            />
+          </div>
+
+          {/* Season progress */}
+          {season && (
+            <>
+              <div className="w-px h-10 bg-[#2a3045] shrink-0" />
+              <div className="flex flex-col justify-center min-w-[140px] shrink-0">
+                <div className="flex items-center justify-between mb-1.5">
+                  <span className="text-xs font-semibold text-white">{season.stage}</span>
+                  <span className="text-[10px] text-gray-500">Day {season.daysElapsed}/{season.totalDays}</span>
+                </div>
+                <div className="relative h-2">
+                  <Progress value={Math.round(season.pct * 100)} className="gap-0">
+                    <ProgressTrack className="h-2 rounded-full bg-gray-800">
+                      <ProgressIndicator
+                        className="rounded-full"
+                        style={{ background: 'linear-gradient(to right, #16a34a, #84cc16, #f59e0b, #ef4444)' }}
+                      />
+                    </ProgressTrack>
+                  </Progress>
+                  <div
+                    className="absolute top-1/2 -translate-y-1/2 w-2.5 h-2.5 rounded-full bg-white"
+                    style={{ left: `calc(${Math.round(season.pct * 100)}% - 5px)`, boxShadow: '0 0 5px 2px white' }}
+                  />
+                </div>
+              </div>
+            </>
+          )}
+
+          {/* Actions pushed right */}
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              onClick={() => field && exportReport(field, zones, recommendations)}
+              disabled={!field}
+              title="Export report"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-green-600 text-green-400 hover:bg-green-900/30 transition-colors disabled:opacity-30 text-xs font-medium"
+            >
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-3.5 h-3.5">
+                <path d="M3 10v3h10v-3M8 2v7M5 6l3 3 3-3" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+              Export
+            </button>
+            <span className="text-[10px] px-2 py-1 rounded-full border border-green-800 text-green-400 bg-green-950/40 font-medium">LIVE</span>
+          </div>
+        </div>
       </div>
 
-      {/* Sidebar — 35% on desktop, stacks below on mobile */}
-      <div className="w-full md:w-[35%] h-[50vh] md:h-screen flex flex-col overflow-hidden border-l border-gray-800">
-        {/* Header */}
-        <div className="px-4 py-3 border-b border-gray-800 shrink-0">
-          <h1 className="text-sm font-semibold text-white">
-            {field ? field.name : 'Loading…'}
-          </h1>
-          {field && (
-            <p className="text-xs text-gray-400 mt-0.5">
-              {field.crop_type.charAt(0).toUpperCase() + field.crop_type.slice(1)} · Planted{' '}
-              {new Date(field.planting_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-            </p>
-          )}
+      {/* ── Map + sidebar row ───────────────────────────────────────────────── */}
+      <div className="flex flex-1 min-h-0">
+
+        {/* Map */}
+        <div className="flex-1 relative">
+          <FieldMap center={center} zoom={DEFAULT_ZOOM}>
+            <ZoneLayer fieldId={field_id} onZoneSelect={setSelectedZone} selectedZoneId={selectedZone?.id} />
+            <ZoneTooltip fieldId={field_id} />
+            <UrgencyPulse recommendations={recommendations} zones={zones} />
+          </FieldMap>
         </div>
 
-        {/* Action queue */}
-        <ActionQueue fieldId={field_id} />
+        {/* Sidebar */}
+        <div
+          className="w-[35%] flex flex-col overflow-hidden border-l border-[#2a3045]"
+          style={{ backgroundColor: '#0f1117' }}
+        >
+          {/* Scrollable area */}
+          <div className="flex-1 overflow-y-auto min-h-0 scrollbar-thin scrollbar-thumb-gray-700 scrollbar-track-transparent">
+            <ActionQueue
+              fieldId={field_id}
+              cropType={field?.crop_type}
+              fieldName={field?.name}
+            />
 
-        {/* Zone detail panel */}
-        {selectedZone && (
-          <ZoneDetailPanel zone={selectedZone} onClose={() => setSelectedZone(null)} />
-        )}
+            {selectedZone && (
+              <ZoneDetailPanel zone={selectedZone} onClose={() => setSelectedZone(null)} />
+            )}
+          </div>
+
+          {/* Fixed bottom sparklines */}
+          <ZoneSparklines zones={zones} />
+        </div>
       </div>
 
       {/* Critical toast */}
