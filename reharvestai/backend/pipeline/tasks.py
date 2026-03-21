@@ -2,9 +2,9 @@
 tasks.py — Celery tasks for the ReHarvestAI satellite pipeline.
 
 Task graph:
-  dispatch_active_fields   (beat, every 5 days)
-      └─► run_field_analysis(field_id)     (one per active field)
-              └─► run_harvest_agent(field_id)  (Person 2 fills in body)
+  dispatch_active_fields   (beat, every 5 days)        ← Person 3
+      └─► run_field_analysis(field_id)                  ← Person 3
+              └─► run_harvest_agent(field_id)           ← Person 2
 """
 from __future__ import annotations
 
@@ -45,14 +45,11 @@ def dispatch_active_fields(self) -> dict:
     return {"dispatched": len(fields)}
 
 
-# ─── Main pipeline task ───────────────────────────────────────────────────────
+# ─── Satellite pipeline task ──────────────────────────────────────────────────
 
 @celery_app.task(bind=True, name="pipeline.run_field_analysis", max_retries=3)
 def run_field_analysis(self, field_id: str) -> dict:
-    """Run the full satellite pipeline for one field.
-
-    All async DB operations are collected into a single asyncio.run() call
-    so they share one event loop and one connection pool.
+    """Run the full satellite pipeline for one field, then trigger the AI agent.
 
     Steps:
       1. Fetch field polygon from DB.
@@ -62,9 +59,6 @@ def run_field_analysis(self, field_id: str) -> dict:
       5. Segment field into zones with SAM3.
       6. Compute per-zone mean scores and write to DB.
       7. Signal the AI agent task.
-
-    Returns:
-        {"field_id": str, "zones_written": int, "captured_at": str}
     """
     from app.config import settings
     from pipeline import raster, sentinel
@@ -73,7 +67,6 @@ def run_field_analysis(self, field_id: str) -> dict:
     from pipeline.segmentation import segment_field
 
     try:
-        # ── All async DB work in one event loop ──────────────────────────────
         async def _run_async():
             import asyncpg
             dsn = settings.DATABASE_URL.replace("postgresql+asyncpg://", "postgresql://")
@@ -86,7 +79,6 @@ def run_field_analysis(self, field_id: str) -> dict:
                 bbox = raster.bbox_from_polygon(polygon_wkt)
                 date_range = sentinel.build_date_range(settings.SENTINEL_LOOKBACK_DAYS)
 
-                # ── 2–5: sync pipeline steps (CPU-bound) ─────────────────────
                 with tempfile.TemporaryDirectory(prefix="reharvest_") as tmp:
                     band_dir = Path(tmp) / field_id
                     band_dir.mkdir()
@@ -107,7 +99,6 @@ def run_field_analysis(self, field_id: str) -> dict:
                         field_polygon_wkt=polygon_wkt,
                     )
 
-                    # ── 6: write results ──────────────────────────────────────
                     captured_at = datetime.now(tz=timezone.utc)
                     zone_ids = await upsert_zones_and_scores(
                         pool=pool,
@@ -127,7 +118,7 @@ def run_field_analysis(self, field_id: str) -> dict:
             logger.error("field=%s not found in DB", field_id)
             return {"error": f"field {field_id} not found"}
 
-        # ── 7. Trigger AI agent ───────────────────────────────────────────────
+        # Trigger AI agent after zones are written to DB
         run_harvest_agent.delay(field_id)
 
         result = {
@@ -139,7 +130,7 @@ def run_field_analysis(self, field_id: str) -> dict:
         return result
 
     except Exception as exc:
-        countdown = 60 * (2 ** self.request.retries)  # 60s, 120s, 240s
+        countdown = 60 * (2 ** self.request.retries)
         logger.warning(
             "field=%s pipeline failed (attempt %d): %s — retrying in %ds",
             field_id, self.request.retries + 1, exc, countdown,
@@ -147,14 +138,69 @@ def run_field_analysis(self, field_id: str) -> dict:
         raise self.retry(exc=exc, countdown=countdown)
 
 
-# ─── AI agent task (stub for Person 2) ───────────────────────────────────────
+# ─── AI agent task ────────────────────────────────────────────────────────────
 
 @celery_app.task(bind=True, name="pipeline.run_harvest_agent", max_retries=2)
-def run_harvest_agent(self, field_id: str) -> None:
-    """Trigger the AI agent after a pipeline run completes.
+def run_harvest_agent(self, field_id: str) -> dict:
+    """Run the LangGraph harvest-recommendation agent for a field.
 
-    Person 2 implements the body of this task. The signature is fixed:
-    it receives a field_id (str UUID) and should query the DB for latest
-    zone scores, run the LangGraph agent, and write recommendations/alerts.
+    Called automatically by run_field_analysis after zone scores are written.
+    Reads zones + NDVI from DB, runs the 5-node LangGraph agent, writes
+    recommendations, alerts, and agent trace back to DB.
+
+    Args:
+        field_id: UUID string of the field to analyse.
+
+    Returns:
+        {"field_id": str, "recommendation_count": int, "critical_alert_count": int}
     """
-    pass
+    try:
+        return asyncio.run(_run_agent(field_id))
+    except Exception as exc:
+        logger.exception("run_harvest_agent failed for field_id=%s: %s", field_id, exc)
+        raise self.retry(exc=exc, countdown=60 * (2 ** self.request.retries))
+
+
+async def _run_agent(field_id: str) -> dict:
+    """Async core — runs in a fresh event loop via asyncio.run()."""
+    import app.database as db_module
+    from app.agent.graph import build_graph
+    from app.agent.state import AgentState
+
+    await db_module.init_db_pool()
+
+    try:
+        graph = build_graph()
+
+        initial_state: AgentState = {
+            "field_id": field_id,
+            "field_lat": 0.0,
+            "field_lon": 0.0,
+            "crop_type": "",
+            "planting_date": "",
+            "days_since_planting": 0,
+            "zones": [],
+            "weather_forecast": {},
+            "zone_classifications": [],
+            "recommendations": [],
+            "reasoning_trace": [],
+        }
+
+        final_state: AgentState = await graph.ainvoke(initial_state)
+
+        recommendations = final_state.get("recommendations", [])
+        critical_count = sum(1 for r in recommendations if r.get("urgency") == "critical")
+
+        logger.info(
+            "run_harvest_agent completed for field_id=%s: %d recommendations, %d critical",
+            field_id, len(recommendations), critical_count,
+        )
+
+        return {
+            "field_id": field_id,
+            "recommendation_count": len(recommendations),
+            "critical_alert_count": critical_count,
+        }
+
+    finally:
+        await db_module.close_db_pool()

@@ -1,20 +1,15 @@
 FROM python:3.11-slim
 
-# System deps for rasterio, psycopg2, shapely
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    gdal-bin libgdal-dev gcc g++ libpq-dev curl \
-    && rm -rf /var/lib/apt/lists/*
-
-# Install uv
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /usr/local/bin/
-
 WORKDIR /app
 
+# System deps for rasterio, shapely, psycopg2
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc g++ libgdal-dev libgeos-dev libproj-dev \
+    && rm -rf /var/lib/apt/lists/*
+
 COPY pyproject.toml .
-RUN uv sync --no-dev
+RUN pip install --no-cache-dir -e .
 
 COPY . .
 
-ENV PYTHONUNBUFFERED=1 \
-    PYTHONDONTWRITEBYTECODE=1 \
-    UV_SYSTEM_PYTHON=1
+EXPOSE 8000

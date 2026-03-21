@@ -1,0 +1,144 @@
+from __future__ import annotations
+
+import json
+import uuid
+from datetime import date, datetime, timezone
+
+from fastapi import APIRouter, HTTPException
+
+from app import database
+from app.models.field import FieldCreate, FieldResponse, GeoJSON
+
+router = APIRouter(prefix="/fields", tags=["fields"])
+
+
+# -----------------------------------------------------------------
+# ----------
+# POST /fields — create a new field
+# ---------------------------------------------------------------------------
+
+@router.post("", response_model=FieldResponse, status_code=201)
+async def create_field(body: FieldCreate) -> FieldResponse:
+    """Insert a new field polygon into the database and return the persisted row."""
+    pool = await database.get_pool()
+
+    polygon_json = body.polygon.model_dump_json()
+
+    try:
+        row = await pool.fetchrow(
+            """
+            INSERT INTO fields (farmer_id, name, polygon, crop_type, planting_date)
+            VALUES ($1, $2, ST_GeomFromGeoJSON($3), $4, $5)
+            RETURNING
+                id,
+                farmer_id,
+                name,
+                ST_AsGeoJSON(polygon)::json AS polygon,
+                crop_type,
+                planting_date,
+                created_at
+            """,
+            body.farmer_id,
+            body.name,
+            polygon_json,
+            body.crop_type,
+            body.planting_date,
+        )
+    except Exception:
+        raise HTTPException(status_code=500, detail="Failed to create field")
+
+    if row is None:
+        raise HTTPException(status_code=500, detail="Insert returned no row")
+
+    return _row_to_field_response(dict(row))
+
+
+# ---------------------------------------------------------------------------
+# GET /fields/{field_id} — fetch a single field
+# ---------------------------------------------------------------------------
+
+@router.get("/{field_id}", response_model=FieldResponse)
+async def get_field(field_id: uuid.UUID) -> FieldResponse:
+    """Fetch a single field by its UUID."""
+    pool = await database.get_pool()
+
+    try:
+        row = await pool.fetchrow(
+            """
+            SELECT
+                id,
+                farmer_id,
+                name,
+                ST_AsGeoJSON(polygon)::json AS polygon,
+                crop_type,
+                planting_date,
+                created_at
+            FROM fields
+            WHERE id = $1
+            """,
+            field_id,
+        )
+    except Exception:
+        raise HTTPException(status_code=500, detail="Failed to fetch field")
+
+    if row is None:
+        raise HTTPException(status_code=404, detail=f"Field {field_id} not found")
+
+    return _row_to_field_response(dict(row))
+
+
+# ---------------------------------------------------------------------------
+# GET /fields — list all fields
+# ---------------------------------------------------------------------------
+
+@router.get("", response_model=list[FieldResponse])
+async def list_fields() -> list[FieldResponse]:
+    """Return all fields ordered by creation time (newest first)."""
+    pool = await database.get_pool()
+
+    try:
+        rows = await pool.fetch(
+            """
+            SELECT
+                id,
+                farmer_id,
+                name,
+                ST_AsGeoJSON(polygon)::json AS polygon,
+                crop_type,
+                planting_date,
+                created_at
+            FROM fields
+            ORDER BY created_at DESC
+            """
+        )
+    except Exception:
+        raise HTTPException(status_code=500, detail="Failed to list fields")
+
+    return [_row_to_field_response(dict(r)) for r in rows]
+
+
+# ---------------------------------------------------------------------------
+# Internal helper
+# ---------------------------------------------------------------------------
+
+def _row_to_field_response(row: dict) -> FieldResponse:
+    """Convert a raw asyncpg row dict to a FieldResponse.
+
+    asyncpg returns:
+    - ``id`` / ``farmer_id`` as ``uuid.UUID`` objects
+    - ``polygon`` as the result of ``::json`` cast — asyncpg decodes it to a
+      plain Python dict automatically when the column alias type is json/jsonb
+    """
+    polygon_raw = row["polygon"]
+    if isinstance(polygon_raw, str):
+        polygon_raw = json.loads(polygon_raw)
+
+    return FieldResponse(
+        id=row["id"],
+        farmer_id=row["farmer_id"],
+        name=row["name"],
+        polygon=GeoJSON(**polygon_raw),
+        crop_type=row["crop_type"],
+        planting_date=row["planting_date"],
+        created_at=row["created_at"],
+    )

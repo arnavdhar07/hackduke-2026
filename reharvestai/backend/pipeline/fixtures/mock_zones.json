@@ -1,0 +1,92 @@
+{
+  "_comment": "Realistic mock NDVI data for a corn field near Durham, NC. 3 zones with different harvest readiness states. Used when USE_MOCK_SATELLITE=True or real pipeline fails.",
+  "field": {
+    "name": "Demo Corn Field – Durham NC",
+    "crop_type": "corn",
+    "planting_date": "2025-05-15",
+    "polygon": {
+      "type": "Polygon",
+      "coordinates": [[
+        [-78.9200, 35.9900],
+        [-78.8900, 35.9900],
+        [-78.8900, 35.9100],
+        [-78.9200, 35.9100],
+        [-78.9200, 35.9900]
+      ]]
+    }
+  },
+  "zones": [
+    {
+      "label": "Zone A – North",
+      "polygon": {
+        "type": "Polygon",
+        "coordinates": [[
+          [-78.9200, 35.9900],
+          [-78.8900, 35.9900],
+          [-78.8900, 35.9600],
+          [-78.9200, 35.9600],
+          [-78.9200, 35.9900]
+        ]]
+      },
+      "ndvi_timeseries": [
+        {"ndvi": 0.72, "ndwi": 0.41, "ndre": 0.65, "days_ago": 13},
+        {"ndvi": 0.74, "ndwi": 0.42, "ndre": 0.66, "days_ago": 11},
+        {"ndvi": 0.77, "ndwi": 0.43, "ndre": 0.68, "days_ago": 9},
+        {"ndvi": 0.80, "ndwi": 0.44, "ndre": 0.70, "days_ago": 7},
+        {"ndvi": 0.83, "ndwi": 0.44, "ndre": 0.71, "days_ago": 5},
+        {"ndvi": 0.85, "ndwi": 0.45, "ndre": 0.72, "days_ago": 3},
+        {"ndvi": 0.86, "ndwi": 0.45, "ndre": 0.72, "days_ago": 1},
+        {"ndvi": 0.85, "ndwi": 0.44, "ndre": 0.71, "days_ago": 0}
+      ],
+      "_expected_classification": "harvest_now"
+    },
+    {
+      "label": "Zone B – Center",
+      "polygon": {
+        "type": "Polygon",
+        "coordinates": [[
+          [-78.9200, 35.9600],
+          [-78.8900, 35.9600],
+          [-78.8900, 35.9300],
+          [-78.9200, 35.9300],
+          [-78.9200, 35.9600]
+        ]]
+      },
+      "ndvi_timeseries": [
+        {"ndvi": 0.44, "ndwi": 0.35, "ndre": 0.40, "days_ago": 13},
+        {"ndvi": 0.46, "ndwi": 0.36, "ndre": 0.42, "days_ago": 11},
+        {"ndvi": 0.48, "ndwi": 0.37, "ndre": 0.44, "days_ago": 9},
+        {"ndvi": 0.50, "ndwi": 0.38, "ndre": 0.46, "days_ago": 7},
+        {"ndvi": 0.51, "ndwi": 0.38, "ndre": 0.47, "days_ago": 5},
+        {"ndvi": 0.53, "ndwi": 0.39, "ndre": 0.48, "days_ago": 3},
+        {"ndvi": 0.54, "ndwi": 0.39, "ndre": 0.49, "days_ago": 1},
+        {"ndvi": 0.52, "ndwi": 0.38, "ndre": 0.48, "days_ago": 0}
+      ],
+      "_expected_classification": "approaching"
+    },
+    {
+      "label": "Zone C – South",
+      "polygon": {
+        "type": "Polygon",
+        "coordinates": [[
+          [-78.9200, 35.9300],
+          [-78.8900, 35.9300],
+          [-78.8900, 35.9100],
+          [-78.9200, 35.9100],
+          [-78.9200, 35.9300]
+        ]]
+      },
+      "ndvi_timeseries": [
+        {"ndvi": 0.28, "ndwi": 0.20, "ndre": 0.25, "days_ago": 13},
+        {"ndvi": 0.29, "ndwi": 0.21, "ndre": 0.26, "days_ago": 11},
+        {"ndvi": 0.30, "ndwi": 0.21, "ndre": 0.27, "days_ago": 9},
+        {"ndvi": 0.30, "ndwi": 0.22, "ndre": 0.27, "days_ago": 7},
+        {"ndvi": 0.31, "ndwi": 0.22, "ndre": 0.28, "days_ago": 5},
+        {"ndvi": 0.30, "ndwi": 0.21, "ndre": 0.27, "days_ago": 3},
+        {"ndvi": 0.31, "ndwi": 0.22, "ndre": 0.28, "days_ago": 1},
+        {"ndvi": 0.31, "ndwi": 0.22, "ndre": 0.28, "days_ago": 0}
+      ],
+      "_expected_classification": "not_ready"
+    }
+  ]
+}

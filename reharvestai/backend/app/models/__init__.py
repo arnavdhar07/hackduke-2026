@@ -1,15 +1,25 @@
-from .alert import AlertResponse
-from .field import FieldCreate, FieldResponse
-from .recommendation import RecommendationResponse, RecommendationUpdate
-from .zone import NDVIScores, NDVITimeseriesPoint, ZoneResponse
+from app.models.field import (
+    FieldCreate,
+    FieldResponse,
+    ZoneResponse,
+    ZoneScore,
+    RecommendationResponse,
+    RecommendationUpdate,
+    AlertResponse,
+    AgentTraceResponse,
+    AgentTraceNodeEntry,
+    GeoJSON,
+)
 
 __all__ = [
     "FieldCreate",
     "FieldResponse",
     "ZoneResponse",
-    "NDVIScores",
-    "NDVITimeseriesPoint",
+    "ZoneScore",
     "RecommendationResponse",
     "RecommendationUpdate",
     "AlertResponse",
+    "AgentTraceResponse",
+    "AgentTraceNodeEntry",
+    "GeoJSON",
 ]
