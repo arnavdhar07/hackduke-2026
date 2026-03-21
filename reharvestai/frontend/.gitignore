@@ -1,0 +1,28 @@
+# ── Secrets & credentials ──────────────────────────────────────────────────
+.env
+.env.local
+.env.*.local
+.env.development
+.env.production
+.env.staging
+*.pem
+*.key
+secrets/
+
+# ── Next.js ────────────────────────────────────────────────────────────────
+/.next/
+/out/
+/build
+
+# ── Dependencies ───────────────────────────────────────────────────────────
+/node_modules
+/.pnp
+.pnp.js
+
+# ── Debug ──────────────────────────────────────────────────────────────────
+npm-debug.log*
+yarn-error.log*
+
+# ── Misc ───────────────────────────────────────────────────────────────────
+.DS_Store
+*.log

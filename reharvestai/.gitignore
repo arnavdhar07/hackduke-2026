@@ -1,0 +1,43 @@
+# ── Secrets & credentials ──────────────────────────────────────────────────
+.env
+.env.local
+.env.*.local
+.env.development
+.env.production
+.env.staging
+*.pem
+*.key
+*.p12
+*.pfx
+secrets/
+credentials/
+*_credentials.json
+*_secret.json
+service-account*.json
+
+# ── OS & editor ────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/settings.json
+
+# ── Python (backend) ───────────────────────────────────────────────────────
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+*.egg-info/
+dist/
+.pytest_cache/
+
+# ── Node (frontend) ────────────────────────────────────────────────────────
+node_modules/
+.next/
+out/
+build/
+npm-debug.log*
+yarn-error.log*
+
+# ── Misc ───────────────────────────────────────────────────────────────────
+*.log
