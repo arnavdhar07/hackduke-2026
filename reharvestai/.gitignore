@@ -1,0 +1,24 @@
+# Environment secrets — never commit
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+dist/
+build/
+
+# Models (large binary files)
+models/
+
+# Celery
+celerybeat-schedule
+celerybeat.pid
+
+# Rasterio / GDAL temp files
+*.tif
+*.geotiff
+
+# OS
+.DS_Store
