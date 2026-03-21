@@ -13,7 +13,7 @@ logger = logging.getLogger("api")
 
 from app import database
 from app import redis as redis_module
-from app.routers import fields, zones, recommendations, agent
+from app.routers import fields, zones, recommendations, agent, weather
 
 
 # ---------------------------------------------------------------------------
@@ -74,6 +74,7 @@ app.include_router(fields.router, prefix=API_PREFIX)
 app.include_router(zones.router, prefix=API_PREFIX)
 app.include_router(recommendations.router, prefix=API_PREFIX)
 app.include_router(agent.router, prefix=API_PREFIX)
+app.include_router(weather.router, prefix=API_PREFIX)
 
 
 # ---------------------------------------------------------------------------

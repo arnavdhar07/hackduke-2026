@@ -4,6 +4,9 @@ import type { Polygon } from "geojson";
 const MOCK_MODE = false;
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000/api/v1";
 
+// field-001 is the demo field — always served from mock data regardless of MOCK_MODE
+const isDemo = (fieldId?: string) => fieldId === "field-001";
+
 // ─── Mock state (persists across calls within a session) ──────────────────────
 
 let mockField: Field | null = null;
@@ -228,17 +231,17 @@ export async function createField(body: Omit<Field, "id">): Promise<Field> {
 }
 
 export async function getField(fieldId: string): Promise<Field> {
-  if (MOCK_MODE) { seedDefault(); return mockField!; }
+  if (MOCK_MODE || isDemo(fieldId)) { seedDefault(); return mockField!; }
   return apiFetch<Field>(`/fields/${fieldId}`);
 }
 
 export async function getZones(fieldId: string): Promise<Zone[]> {
-  if (MOCK_MODE) { seedDefault(); return mockZones!; }
+  if (MOCK_MODE || isDemo(fieldId)) { seedDefault(); return mockZones!; }
   return apiFetch<Zone[]>(`/fields/${fieldId}/zones`);
 }
 
 export async function getRecommendations(fieldId: string): Promise<Recommendation[]> {
-  if (MOCK_MODE) { seedDefault(); return mockRecommendations!; }
+  if (MOCK_MODE || isDemo(fieldId)) { seedDefault(); return mockRecommendations!; }
   return apiFetch<Recommendation[]>(`/fields/${fieldId}/recommendations`);
 }
 
@@ -256,22 +259,24 @@ export async function patchRecommendation(id: string, status: Recommendation["st
   });
 }
 
+const MOCK_WEATHER: WeatherForecast = {
+  field_id: "",
+  days: [
+    { date: "2026-03-21", temp_high_c: 24, temp_low_c: 13, precip_mm: 0,  condition: "clear",  wind_kph: 11 },
+    { date: "2026-03-22", temp_high_c: 21, temp_low_c: 14, precip_mm: 6,  condition: "cloudy", wind_kph: 18 },
+    { date: "2026-03-23", temp_high_c: 17, temp_low_c: 12, precip_mm: 28, condition: "rain",   wind_kph: 24 },
+  ],
+};
+
 export async function getWeatherForecast(fieldId: string): Promise<WeatherForecast> {
-  if (MOCK_MODE) {
-    return {
-      field_id: fieldId,
-      days: [
-        { date: "2026-03-21", temp_high_c: 24, temp_low_c: 13, precip_mm: 0,  condition: "clear",  wind_kph: 11 },
-        { date: "2026-03-22", temp_high_c: 21, temp_low_c: 14, precip_mm: 6,  condition: "cloudy", wind_kph: 18 },
-        { date: "2026-03-23", temp_high_c: 17, temp_low_c: 12, precip_mm: 28, condition: "rain",   wind_kph: 24 },
-      ],
-    };
+  if (MOCK_MODE || isDemo(fieldId)) {
+    return { ...MOCK_WEATHER, field_id: fieldId };
   }
   return apiFetch<WeatherForecast>(`/fields/${fieldId}/weather`);
 }
 
 export async function getAgentTrace(fieldId: string): Promise<AgentTrace> {
-  if (MOCK_MODE) {
+  if (MOCK_MODE || isDemo(fieldId)) {
     seedDefault();
     return generateAgentTrace(mockField!, mockZones!);
   }
