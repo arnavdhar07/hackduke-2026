@@ -107,7 +107,28 @@ async def update_recommendation(
             detail=f"Recommendation {recommendation_id} not found",
         )
 
-    return _row_to_rec(dict(row))
+    rec = dict(row)
+
+    if body.status == "accepted":
+        # Get field name for the todo
+        field_row = await pool.fetchrow(
+            "SELECT name FROM fields WHERE id = $1", rec["field_id"]
+        )
+        field_name = field_row["name"] if field_row else "Unknown Field"
+        await pool.execute(
+            """INSERT INTO todos
+               (field_id, recommendation_id, action_type, zone_label, field_name, urgency)
+               VALUES ($1, $2, $3, $4, $5, $6)
+               ON CONFLICT DO NOTHING""",
+            rec["field_id"],
+            rec["id"],
+            rec["action_type"],
+            rec.get("zone_label", ""),
+            field_name,
+            rec["urgency"],
+        )
+
+    return _row_to_rec(rec)
 
 
 # ---------------------------------------------------------------------------

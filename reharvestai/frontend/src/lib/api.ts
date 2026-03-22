@@ -313,3 +313,45 @@ export function estimatedRevenueAtRisk(
   if (!price || !estimatedYieldBushels) return 0;
   return Math.round(estimatedYieldBushels * price * confidence);
 }
+
+// ── Fields list ──────────────────────────────────────────────────────────────
+export async function listFields(): Promise<Field[]> {
+  const res = await fetch(`${API_BASE}/fields`);
+  if (!res.ok) throw new Error('Failed to fetch fields');
+  return res.json();
+}
+
+// ── Todos ────────────────────────────────────────────────────────────────────
+export interface Todo {
+  id: string;
+  farmer_id: string;
+  field_id: string;
+  recommendation_id: string | null;
+  action_type: string;
+  zone_label: string;
+  field_name: string;
+  urgency: 'low' | 'medium' | 'high' | 'critical';
+  status: 'pending' | 'done';
+  created_at: string;
+  completed_at: string | null;
+}
+
+export async function getTodos(): Promise<Todo[]> {
+  const res = await fetch(`${API_BASE}/todos`);
+  if (!res.ok) return [];
+  return res.json();
+}
+
+export async function completeTodo(id: string): Promise<Todo> {
+  const res = await fetch(`${API_BASE}/todos/${id}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ status: 'done' }),
+  });
+  if (!res.ok) throw new Error('Failed to update todo');
+  return res.json();
+}
+
+export async function triggerAnalysis(fieldId: string): Promise<void> {
+  await fetch(`${API_BASE}/fields/${fieldId}/analyze`, { method: 'POST' });
+}

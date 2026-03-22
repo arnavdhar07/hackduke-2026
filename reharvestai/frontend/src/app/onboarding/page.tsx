@@ -13,7 +13,7 @@ export default function OnboardingPage() {
   const router = useRouter();
   const [polygon, setPolygon] = useState<GeoJSON.Polygon | null>(null);
   const [farmName, setFarmName] = useState('');
-  const [cropType, setCropType] = useState('corn');
+  const [cropType, setCropType] = useState('');
   const [plantingDate, setPlantingDate] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -30,7 +30,7 @@ export default function OnboardingPage() {
         crop_type: cropType,
         planting_date: plantingDate,
       });
-      router.push(`/dashboard/${field.id}`);
+      router.push('/fields');
     } catch (err) {
       setError('Failed to create field. Please try again.');
       setLoading(false);
@@ -64,17 +64,14 @@ export default function OnboardingPage() {
 
           <div>
             <label className="block text-xs text-gray-400 mb-1">Crop type</label>
-            <select
+            <input
+              type="text"
               value={cropType}
               onChange={e => setCropType(e.target.value)}
-              className="w-full bg-gray-800 border border-gray-600 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-green-500"
-            >
-              <option value="corn">Corn</option>
-              <option value="wheat">Wheat</option>
-              <option value="soy">Soy</option>
-              <option value="cotton">Cotton</option>
-              <option value="rice">Rice</option>
-            </select>
+              required
+              placeholder="e.g. corn, wheat, soybeans, coffee…"
+              className="w-full bg-gray-800 border border-gray-600 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-green-500"
+            />
           </div>
 
           <div>
@@ -99,7 +96,7 @@ export default function OnboardingPage() {
 
           <button
             type="submit"
-            disabled={!polygon || !farmName || !plantingDate || loading}
+            disabled={!polygon || !farmName || !cropType || !plantingDate || loading}
             className="w-full bg-green-600 hover:bg-green-500 disabled:bg-gray-700 disabled:text-gray-500 disabled:cursor-not-allowed text-white font-semibold rounded-lg py-2.5 text-sm transition-colors"
           >
             {loading ? 'Creating field…' : 'Create field →'}

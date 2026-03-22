@@ -37,7 +37,7 @@ const Nav = React.memo(function Nav() {
             Demo
           </Link>
           <Link
-            href="/onboarding"
+            href="/fields"
             className="text-sm font-semibold px-4 py-1.5 rounded-lg bg-green-500 hover:bg-green-400 text-gray-950 transition-colors"
           >
             Get started
@@ -63,7 +63,7 @@ const Nav = React.memo(function Nav() {
           ))}
           <div className="pt-3 border-t border-gray-800/50 flex flex-col gap-2">
             <Link href="/dashboard/field-001" className="text-sm text-white/60 text-center py-2">Demo dashboard</Link>
-            <Link href="/onboarding" className="text-sm font-semibold text-center py-2 rounded-lg bg-green-500 text-gray-950">Get started</Link>
+            <Link href="/fields" className="text-sm font-semibold text-center py-2 rounded-lg bg-green-500 text-gray-950">Get started</Link>
           </div>
         </div>
       )}
@@ -124,7 +124,7 @@ export default function LandingPage() {
 
           <div className="flex flex-col sm:flex-row gap-3">
             <Link
-              href="/onboarding"
+              href="/fields"
               className="inline-flex items-center justify-center gap-2 px-7 py-3 rounded-xl font-bold text-sm text-gray-950 transition-all hover:scale-105 active:scale-95 shadow-lg shadow-green-500/20"
               style={{ background: 'linear-gradient(to bottom, #ffffff, rgba(255,255,255,0.85))' }}
             >
@@ -446,7 +446,7 @@ export default function LandingPage() {
           </h2>
           <p className="text-gray-400 text-sm mb-8">Draw it on the map. It takes 60 seconds.</p>
           <Link
-            href="/onboarding"
+            href="/fields"
             className="inline-flex items-center gap-2 px-8 py-3.5 rounded-xl font-bold text-sm text-gray-950 transition-all hover:scale-105 active:scale-95 shadow-xl shadow-green-500/20"
             style={{ background: 'linear-gradient(to bottom, #ffffff, rgba(255,255,255,0.85))' }}
           >

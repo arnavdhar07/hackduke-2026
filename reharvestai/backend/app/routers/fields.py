@@ -121,6 +121,21 @@ async def list_fields() -> list[FieldResponse]:
 
 
 # ---------------------------------------------------------------------------
+# POST /fields/{field_id}/analyze — re-run the satellite pipeline
+# ---------------------------------------------------------------------------
+
+@router.post("/{field_id}/analyze", status_code=202)
+async def trigger_analysis(field_id: uuid.UUID, background_tasks: BackgroundTasks) -> dict:
+    """Re-run the satellite pipeline + AI agent for a field."""
+    pool = await database.get_pool()
+    row = await pool.fetchrow("SELECT id FROM fields WHERE id = $1", field_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="Field not found")
+    background_tasks.add_task(run_synthetic_pipeline, str(field_id))
+    return {"status": "analysis_started", "field_id": str(field_id)}
+
+
+# ---------------------------------------------------------------------------
 # Internal helper
 # ---------------------------------------------------------------------------
 

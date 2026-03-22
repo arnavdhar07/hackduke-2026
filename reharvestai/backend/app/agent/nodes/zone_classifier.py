@@ -111,7 +111,9 @@ def _build_user_message(state: AgentState) -> str:
     planting_date: str = state["planting_date"]
 
     lines: list[str] = [
-        f"You are an expert agronomist. Classify each crop zone below for harvest readiness.",
+        f"You are an expert agronomist specializing in {crop_type} cultivation. "
+        f"Classify each crop zone below for harvest readiness based on the specific growth "
+        f"characteristics and optimal NDVI/NDWI/NDRE thresholds for {crop_type}.",
         f"",
         f"Field details:",
         f"  Crop type: {crop_type}",
@@ -142,7 +144,8 @@ def _build_user_message(state: AgentState) -> str:
         f"  - urgency options: low | medium | high | critical",
         f"  - risk_reason: empty string unless you see a specific risk to flag",
         f"  - confidence: your certainty as a float 0.0–1.0",
-        f"  - Use all 4 vegetation indices together. NDRE declining while NDVI stable = early stress.",
+        f"  - Use all 4 vegetation indices together, applying thresholds appropriate for {crop_type}.",
+        f"    NDRE declining while NDVI stable = early stress.",
         f"    EVI dropping while NDVI holds = dense canopy maturity signal.",
         f"  - Estimate days_remaining based on rate of NDVI decline (ndvi_delta):",
         f"    if declining at X/week, project to threshold of 40.",

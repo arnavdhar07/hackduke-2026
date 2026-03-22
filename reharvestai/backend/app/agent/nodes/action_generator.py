@@ -65,11 +65,9 @@ _TOOL_SCHEMA = {
                             "type": "number",
                             "description": (
                                 "Estimated yield in bushels for this zone. "
-                                "Base yields per acre: corn=175, wheat=47, soy=50, cotton=0, rice=0. "
-                                "Multiply by zone_area_acres. "
-                                "Apply NDVI modifier: multiply by (0.5 + ndvi/200) so "
-                                "NDVI=80 gives ~0.9x, NDVI=40 gives ~0.7x. "
-                                "Round to nearest integer. Use 0 for cotton/rice."
+                                "Base yields: corn=175, wheat=47, soy=50, other crops=60 bu/acre equivalent. "
+                                "Multiply by zone_area_acres × (0.5 + ndvi/200). "
+                                "Round to nearest integer. Adjust reasoning to match the specific crop type."
                             ),
                         },
                     },
@@ -98,6 +96,9 @@ def _build_user_message(state: AgentState) -> str:
 
     # Lookup base yield for this crop
     base_yield_per_acre = CROP_BASE_YIELDS.get(crop_type.lower(), 0.0)
+    # For unknown crops, use a generic moderate yield to allow the AI to reason
+    if base_yield_per_acre == 0.0 and crop_type.lower() not in ("cotton", "rice"):
+        base_yield_per_acre = 60.0  # generic fallback (bu/acre equivalent)
 
     # Build a zone_area lookup from zones list
     zone_area_by_id: dict[str, float] = {
