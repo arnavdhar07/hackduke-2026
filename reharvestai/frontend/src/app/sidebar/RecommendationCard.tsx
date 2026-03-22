@@ -4,7 +4,7 @@ import { useState } from 'react';
 import Badge from '@/app/ui/Badge';
 import Sparkline from '@/app/ui/Sparkline';
 import { Progress, ProgressTrack, ProgressIndicator } from '@/components/ui/progress';
-import { patchRecommendation } from '@/lib/api';
+import { patchRecommendation, estimatedRevenueAtRisk } from '@/lib/api';
 import { URGENCY_COLOR } from '@/lib/colors';
 import type { Recommendation, Zone, WeatherForecast } from '@/types/api';
 import { useQueryClient } from '@tanstack/react-query';
@@ -48,6 +48,7 @@ interface RecommendationCardProps {
   fieldId: string;
   zone?: Zone;
   forecast?: WeatherForecast;
+  cropType?: string;
 }
 
 export default function RecommendationCard({
@@ -55,6 +56,7 @@ export default function RecommendationCard({
   fieldId,
   zone,
   forecast,
+  cropType,
 }: RecommendationCardProps) {
   const queryClient = useQueryClient();
   const [loading, setLoading] = useState<string | null>(null);
@@ -77,6 +79,10 @@ export default function RecommendationCard({
   const hrs = showCountdown ? hoursUntilRain(forecast!) : null;
   const acres = zone ? polygonAcres(zone.polygon) : null;
 
+  const revenueAtRisk = rec.estimated_yield_bushels > 0
+    ? estimatedRevenueAtRisk(rec.estimated_yield_bushels, cropType ?? '', rec.confidence)
+    : 0;
+
   return (
     <div
       className="rounded-xl p-4 flex flex-col gap-3 border border-[#2a3045] border-l-[3px]"
@@ -98,7 +104,7 @@ export default function RecommendationCard({
       </div>
 
       {/* Urgency badges row */}
-      {(hrs !== null || acres !== null) && (
+      {(hrs !== null || acres !== null || rec.days_remaining >= 0 || rec.crop_health_rating > 0 || revenueAtRisk > 0) && (
         <div className="flex gap-1.5 flex-wrap">
           {hrs !== null && (
             <span className="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-blue-900/50 border border-blue-700/50 text-blue-300 whitespace-nowrap">
@@ -110,11 +116,44 @@ export default function RecommendationCard({
               ~{acres} acres at risk
             </span>
           )}
+          {rec.days_remaining >= 0 && (
+            <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-md whitespace-nowrap border ${
+              rec.days_remaining === 0
+                ? 'bg-red-900/50 border-red-700/50 text-red-300'
+                : rec.days_remaining <= 3
+                ? 'bg-orange-900/50 border-orange-700/50 text-orange-300'
+                : 'bg-amber-900/40 border-amber-700/40 text-amber-300'
+            }`}>
+              {rec.days_remaining === 0 ? '⚠ Past peak' : `⏳ ${rec.days_remaining}d left`}
+            </span>
+          )}
+          {rec.crop_health_rating > 0 && (
+            <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-md border whitespace-nowrap ${
+              rec.crop_health_rating <= 3 ? 'bg-red-900/40 border-red-700/40 text-red-300'
+              : rec.crop_health_rating <= 5 ? 'bg-amber-900/40 border-amber-700/40 text-amber-300'
+              : rec.crop_health_rating <= 7 ? 'bg-yellow-900/40 border-yellow-700/40 text-yellow-300'
+              : 'bg-green-900/40 border-green-700/40 text-green-300'
+            }`}>
+              Health {rec.crop_health_rating}/10
+            </span>
+          )}
+          {revenueAtRisk > 0 && (
+            <span className="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-emerald-900/40 border border-emerald-700/40 text-emerald-300 whitespace-nowrap">
+              ~${revenueAtRisk.toLocaleString()} at risk
+            </span>
+          )}
         </div>
       )}
 
       {/* Reason */}
       <p className="text-xs text-gray-300 leading-relaxed">{rec.reason}</p>
+
+      {/* AI crop health summary */}
+      {rec.crop_health_summary && (
+        <p className="text-[11px] text-blue-300/80 leading-relaxed italic border-l-2 border-blue-500/30 pl-2">
+          {rec.crop_health_summary}
+        </p>
+      )}
 
       {/* Confidence bar */}
       <div className="flex items-center gap-2">
@@ -125,6 +164,14 @@ export default function RecommendationCard({
         </Progress>
         <span className="text-xs text-gray-400 shrink-0 text-right">{Math.round(rec.confidence * 100)}%</span>
       </div>
+
+      {/* Yield estimate */}
+      {rec.estimated_yield_bushels > 0 && (
+        <div className="flex items-center gap-1.5 text-[11px] text-gray-400">
+          <span>Est. yield:</span>
+          <span className="text-white font-medium">{Math.round(rec.estimated_yield_bushels)} bu</span>
+        </div>
+      )}
 
       {/* Divider + Actions */}
       <div className="border-t border-[#2a3045] mt-2 pt-2 flex gap-2">

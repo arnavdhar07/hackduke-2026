@@ -71,6 +71,10 @@ class RecommendationResponse(BaseModel):
     confidence: float
     status: str        # pending | completed | dismissed
     created_at: datetime
+    estimated_yield_bushels: float = 0.0
+    days_remaining: int = -1
+    crop_health_rating: int = 0
+    crop_health_summary: str = ""
 
 
 class RecommendationUpdate(BaseModel):

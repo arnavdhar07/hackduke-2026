@@ -16,15 +16,17 @@ from app import database
 logger = logging.getLogger("api.synthetic_pipeline")
 
 # NDVI/NDWI/NDRE profiles matching the frontend mock zones
+# Zone B has a lower ndre to show early chlorophyll stress before NDVI drops.
+# Zone D has a steeper recent decline to produce a larger negative ndvi_delta.
 _ZONE_PROFILES = [
     {"label": "Zone A", "ndvi": 88.0, "ndwi": 72.0, "ndre": 81.0,
      "trend": [30, 52, 71, 85, 88]},   # NW — healthy
     {"label": "Zone B", "ndvi": 71.0, "ndwi": 58.0, "ndre": 65.0,
-     "trend": [28, 45, 60, 68, 71]},   # NE — watch
+     "trend": [28, 45, 60, 68, 71]},   # NE — watch (lower ndre = early stress signal)
     {"label": "Zone C", "ndvi": 48.0, "ndwi": 35.0, "ndre": 42.0,
      "trend": [25, 38, 44, 47, 48]},   # SW — stressed
     {"label": "Zone D", "ndvi": 22.0, "ndwi": 14.0, "ndre": 18.0,
-     "trend": [55, 48, 35, 28, 22]},   # SE — critical
+     "trend": [62, 55, 42, 32, 22]},   # SE — critical (steeper recent decline)
 ]
 
 
@@ -50,6 +52,7 @@ async def run_synthetic_pipeline(field_id: str) -> None:
             "crop_type": "",
             "planting_date": "",
             "days_since_planting": 0,
+            "days_since_satellite_pass": 0,
             "zones": [],
             "weather_forecast": {},
             "zone_classifications": [],

@@ -4,9 +4,12 @@ Responsibilities:
 1. Query `fields` table for field metadata (lat, lon, crop_type, planting_date)
 2. Query `zones` + `ndvi_timeseries` to build ZoneScore list, including
    ndvi_delta = (latest ndvi) − (ndvi ~7 days ago), defaulting to 0.0
+   evi = EVI2 approximation computed from NDVI
+   zone_area_acres = polygon area from PostGIS
 3. Fetch 7-day weather forecast from Open-Meteo (no API key required)
 4. Calculate days_since_planting from planting_date
-5. Append entry to reasoning_trace
+5. Calculate days_since_satellite_pass from most recent captured_at
+6. Append entry to reasoning_trace
 
 The node is async so it can be used with graph.ainvoke() from Celery via
 asyncio.run().  DB access uses the asyncpg pool from app.database.
@@ -14,7 +17,7 @@ asyncio.run().  DB access uses the asyncpg pool from app.database.
 from __future__ import annotations
 
 import asyncio
-from datetime import date, timezone
+from datetime import date, datetime, timezone
 
 import asyncpg
 import httpx
@@ -45,7 +48,8 @@ _SQL_ZONES_LATEST = """
         n.ndvi,
         n.ndwi,
         n.ndre,
-        n.captured_at
+        n.captured_at,
+        ST_Area(ST_Transform(z.polygon, 3857)) / 4046.86 AS zone_area_acres
     FROM zones z
     JOIN LATERAL (
         SELECT ndvi, ndwi, ndre, captured_at
@@ -84,6 +88,25 @@ async def _fetch_weather(lat: float, lon: float) -> dict:
         resp = await client.get(url, params=params)
         resp.raise_for_status()
         return resp.json()
+
+
+# ---------------------------------------------------------------------------
+# EVI2 approximation from normalized NDVI
+# ---------------------------------------------------------------------------
+
+def _compute_evi_from_ndvi(raw_ndvi_normalized: float) -> float:
+    """Compute EVI2 approximation from a 0-100 normalized NDVI value.
+
+    Converts back to raw (-1 to 1), applies EVI2-like scaling, then
+    normalizes back to 0-100.
+    """
+    # Convert normalized (0-100) back to raw (-1 to 1)
+    ndvi_raw = (raw_ndvi_normalized / 100.0) * 2.0 - 1.0
+    # EVI2 approximation from NDVI raw value
+    evi_raw = 2.5 * ndvi_raw / (1.0 + 2.4 * abs(ndvi_raw) + 1e-8)
+    # Normalize back to 0-100
+    evi = max(0.0, min(100.0, (evi_raw + 1.0) / 2.0 * 100.0))
+    return round(evi, 4)
 
 
 # ---------------------------------------------------------------------------
@@ -152,12 +175,20 @@ async def context_builder(state: AgentState) -> AgentState:
                 else:
                     captured_at_str = str(captured_at)
 
+                # Zone area in acres from PostGIS
+                zone_area_acres: float = float(row["zone_area_acres"]) if row["zone_area_acres"] is not None else 0.0
+
+                # EVI2 approximation from NDVI
+                evi: float = _compute_evi_from_ndvi(latest_ndvi)
+
                 zones.append(ZoneScore(
                     zone_id=zone_id,
                     label=str(row["label"]),
-                    ndvi=float(row["ndvi"]) if row["ndvi"] is not None else 0.0,
+                    ndvi=latest_ndvi,
                     ndwi=float(row["ndwi"]) if row["ndwi"] is not None else 0.0,
                     ndre=float(row["ndre"]) if row["ndre"] is not None else 0.0,
+                    evi=evi,
+                    zone_area_acres=round(zone_area_acres, 2),
                     ndvi_delta=ndvi_delta,
                     captured_at=captured_at_str,
                 ))
@@ -168,7 +199,15 @@ async def context_builder(state: AgentState) -> AgentState:
     # 4. Weather forecast
     weather_forecast: dict = await _fetch_weather(field_lat, field_lon)
 
-    # 5. Trace entry — inputs/outputs must be JSON-serializable
+    # 5. Compute days_since_satellite_pass from most recent zone observation
+    latest_captured = max((z["captured_at"] for z in zones), default=None)
+    if latest_captured:
+        latest_dt = datetime.fromisoformat(latest_captured.replace("Z", "+00:00"))
+        days_since_satellite_pass: int = (datetime.now(timezone.utc) - latest_dt).days
+    else:
+        days_since_satellite_pass = 999
+
+    # 6. Trace entry — inputs/outputs must be JSON-serializable
     trace_entry: dict = {
         "node_name": "context_builder",
         "inputs": {"field_id": field_id},
@@ -178,8 +217,10 @@ async def context_builder(state: AgentState) -> AgentState:
             "crop_type": crop_type,
             "planting_date": planting_date_str,
             "days_since_planting": days_since_planting,
+            "days_since_satellite_pass": days_since_satellite_pass,
             "zone_count": len(zones),
             "weather_days": len(weather_forecast.get("daily", {}).get("time", [])),
+            "data_freshness": f"{days_since_satellite_pass} days since last satellite pass",
         },
     }
 
@@ -190,6 +231,7 @@ async def context_builder(state: AgentState) -> AgentState:
         "crop_type": crop_type,
         "planting_date": planting_date_str,
         "days_since_planting": days_since_planting,
+        "days_since_satellite_pass": days_since_satellite_pass,
         "zones": zones,
         "weather_forecast": weather_forecast,
         "reasoning_trace": [*state.get("reasoning_trace", []), trace_entry],

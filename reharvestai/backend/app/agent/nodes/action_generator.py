@@ -14,6 +14,17 @@ from app.agent.state import AgentState, RecommendationOutput, ZoneClassification
 from app.config import settings
 
 
+# Base yields per acre by crop type (bushels; 0 = weight-based crop, skip estimation)
+CROP_BASE_YIELDS: dict[str, float] = {
+    "corn": 175.0,
+    "wheat": 47.0,
+    "soy": 50.0,
+    "soybeans": 50.0,
+    "cotton": 0.0,   # weight-based, skip bu estimation
+    "rice": 0.0,     # weight-based, skip bu estimation
+}
+
+
 _TOOL_SCHEMA = {
     "name": "generate_actions",
     "description": (
@@ -50,6 +61,17 @@ _TOOL_SCHEMA = {
                             "minimum": 0.0,
                             "maximum": 1.0,
                         },
+                        "estimated_yield_bushels": {
+                            "type": "number",
+                            "description": (
+                                "Estimated yield in bushels for this zone. "
+                                "Base yields per acre: corn=175, wheat=47, soy=50, cotton=0, rice=0. "
+                                "Multiply by zone_area_acres. "
+                                "Apply NDVI modifier: multiply by (0.5 + ndvi/200) so "
+                                "NDVI=80 gives ~0.9x, NDVI=40 gives ~0.7x. "
+                                "Round to nearest integer. Use 0 for cotton/rice."
+                            ),
+                        },
                     },
                     "required": [
                         "zone_id",
@@ -58,6 +80,7 @@ _TOOL_SCHEMA = {
                         "urgency",
                         "reason",
                         "confidence",
+                        "estimated_yield_bushels",
                     ],
                 },
             }
@@ -72,6 +95,19 @@ def _build_user_message(state: AgentState) -> str:
     classifications: list[ZoneClassification] = state["zone_classifications"]
     crop_type: str = state["crop_type"]
     days: int = state["days_since_planting"]
+
+    # Lookup base yield for this crop
+    base_yield_per_acre = CROP_BASE_YIELDS.get(crop_type.lower(), 0.0)
+
+    # Build a zone_area lookup from zones list
+    zone_area_by_id: dict[str, float] = {
+        z["zone_id"]: z.get("zone_area_acres", 0.0)
+        for z in state.get("zones", [])
+    }
+    zone_ndvi_by_id: dict[str, float] = {
+        z["zone_id"]: z.get("ndvi", 0.0)
+        for z in state.get("zones", [])
+    }
 
     # Include a concise weather summary
     daily: dict = state.get("weather_forecast", {}).get("daily", {})
@@ -91,7 +127,7 @@ def _build_user_message(state: AgentState) -> str:
     lines: list[str] = [
         "You are a senior agronomist generating actionable farm recommendations.",
         "",
-        f"Crop type       : {crop_type}",
+        f"Crop type       : {crop_type} (base yield: {base_yield_per_acre:.0f} bu/acre)",
         f"Days planted    : {days}",
         "",
         "\n".join(weather_lines),
@@ -100,14 +136,20 @@ def _build_user_message(state: AgentState) -> str:
     ]
 
     for c in classifications:
+        zone_area = zone_area_by_id.get(c["zone_id"], 0.0)
+        zone_ndvi = zone_ndvi_by_id.get(c["zone_id"], 0.0)
         lines += [
             "",
-            f"  Zone ID     : {c['zone_id']}",
-            f"  Label       : {c['label']}",
-            f"  Status      : {c['status']}",
-            f"  Urgency     : {c['urgency']}",
-            f"  Confidence  : {c['confidence']:.2f}",
-            f"  Risk reason : {c['risk_reason'] or '(none)'}",
+            f"  Zone ID        : {c['zone_id']}",
+            f"  Label          : {c['label']}",
+            f"  Status         : {c['status']}",
+            f"  Urgency        : {c['urgency']}",
+            f"  Confidence     : {c['confidence']:.2f}",
+            f"  Risk reason    : {c['risk_reason'] or '(none)'}",
+            f"  Days remaining : {c['days_remaining']}",
+            f"  Health rating  : {c['crop_health_rating']}/10",
+            f"  Zone area      : {zone_area:.1f} acres",
+            f"  NDVI           : {zone_ndvi:.1f}/100",
         ]
 
     lines += [
@@ -117,6 +159,8 @@ def _build_user_message(state: AgentState) -> str:
         "  - urgency must match the zone's urgency from the classification above",
         "  - reason must be exactly 2 plain English sentences",
         "  - confidence: your certainty as a float 0.0–1.0",
+        f"  - estimated_yield_bushels: base {base_yield_per_acre:.0f} bu/acre × zone_area_acres × (0.5 + ndvi/200)",
+        "    Round to nearest integer. Use 0 for cotton/rice.",
         "  Return one recommendation object for every zone listed above.",
     ]
 
@@ -167,6 +211,17 @@ async def action_generator(state: AgentState) -> AgentState:
             db_label = db_zones[i]["label"]
         if zone_id is None:
             continue  # no zone to map to — skip rather than write bad UUID
+
+        # Carry forward days_remaining, crop_health_rating, crop_health_summary
+        # from the matching ZoneClassification
+        matching_class = next(
+            (c for c in state["zone_classifications"] if c["zone_id"] == zone_id),
+            None,
+        )
+        days_remaining = matching_class["days_remaining"] if matching_class else -1
+        crop_health_rating = matching_class.get("crop_health_rating", 0) if matching_class else 0
+        crop_health_summary = matching_class.get("crop_health_summary", "") if matching_class else ""
+
         recommendations.append(
             RecommendationOutput(
                 zone_id=zone_id,
@@ -175,6 +230,10 @@ async def action_generator(state: AgentState) -> AgentState:
                 urgency=str(r["urgency"]),
                 reason=str(r["reason"]),
                 confidence=float(r["confidence"]),
+                estimated_yield_bushels=float(r.get("estimated_yield_bushels", 0.0)),
+                days_remaining=days_remaining,
+                crop_health_rating=crop_health_rating,
+                crop_health_summary=crop_health_summary,
             )
         )
 
@@ -191,6 +250,8 @@ async def action_generator(state: AgentState) -> AgentState:
                     "action_type": r["action_type"],
                     "urgency": r["urgency"],
                     "confidence": r["confidence"],
+                    "estimated_yield_bushels": r["estimated_yield_bushels"],
+                    "days_remaining": r["days_remaining"],
                 }
                 for r in recommendations
             ]

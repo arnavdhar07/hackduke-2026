@@ -10,6 +10,10 @@ the first 3 days (72-hour window) for risk thresholds:
 
 Only zones with status "harvest_now" or "approaching" are escalated.
 A risk_reason string is added/appended to explain the escalation.
+
+Also applies data staleness confidence degradation:
+  - >= 14 days stale → halve confidence, add WARNING note
+  - >= 7 days stale  → reduce confidence by 25%, add NOTE
 """
 from __future__ import annotations
 
@@ -64,7 +68,7 @@ def _check_weather_risks(weather_forecast: dict) -> tuple[bool, bool, list[str]]
 
 
 async def risk_evaluator(state: AgentState) -> AgentState:
-    """Escalate urgency for at-risk zones based on weather forecast."""
+    """Escalate urgency for at-risk zones based on weather forecast and data freshness."""
     weather_forecast: dict = state.get("weather_forecast", {})
     zone_classifications: list[ZoneClassification] = state.get("zone_classifications", [])
 
@@ -92,6 +96,9 @@ async def risk_evaluator(state: AgentState) -> AgentState:
                 confidence=classification["confidence"],
                 urgency="critical",
                 risk_reason=combined_reason,
+                days_remaining=classification.get("days_remaining", -1),
+                crop_health_rating=classification.get("crop_health_rating", 0),
+                crop_health_summary=classification.get("crop_health_summary", ""),
             )
             escalated_zones.append(classification["zone_id"])
         else:
@@ -103,9 +110,39 @@ async def risk_evaluator(state: AgentState) -> AgentState:
                 confidence=classification["confidence"],
                 urgency=classification["urgency"],
                 risk_reason=classification.get("risk_reason", ""),
+                days_remaining=classification.get("days_remaining", -1),
+                crop_health_rating=classification.get("crop_health_rating", 0),
+                crop_health_summary=classification.get("crop_health_summary", ""),
             )
 
         updated_classifications.append(updated)
+
+    # Data freshness — downgrade confidence when satellite data is stale
+    days_stale = state.get("days_since_satellite_pass", 0)
+    staleness_factor = 1.0
+    staleness_note = ""
+    if days_stale >= 14:
+        staleness_factor = 0.5
+        staleness_note = (
+            f" [WARNING: Satellite data is {days_stale} days old — "
+            f"confidence halved due to stale imagery]"
+        )
+    elif days_stale >= 7:
+        staleness_factor = 0.75
+        staleness_note = (
+            f" [NOTE: Satellite data is {days_stale} days old — confidence reduced]"
+        )
+
+    # Apply staleness factor to all classification confidences
+    for classification in updated_classifications:
+        if staleness_factor < 1.0:
+            classification["confidence"] = round(
+                classification["confidence"] * staleness_factor, 3
+            )
+            if staleness_note and not classification.get("risk_reason", "").endswith(staleness_note):
+                classification["risk_reason"] = (
+                    classification.get("risk_reason", "") + staleness_note
+                ).strip()
 
     trace_entry: dict = {
         "node_name": "risk_evaluator",
@@ -113,10 +150,12 @@ async def risk_evaluator(state: AgentState) -> AgentState:
             "zone_count": len(zone_classifications),
             "precip_risk": precip_risk,
             "frost_risk": frost_risk,
+            "days_since_satellite_pass": days_stale,
         },
         "outputs": {
             "escalated_zone_ids": escalated_zones,
             "risk_reasons": risk_reasons,
+            "staleness_factor": staleness_factor,
         },
     }
 

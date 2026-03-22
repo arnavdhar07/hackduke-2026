@@ -31,6 +31,8 @@ async def get_recommendations(field_id: uuid.UUID) -> list[RecommendationRespons
             SELECT
                 r.id, r.field_id, r.zone_id, r.action_type, r.urgency,
                 r.reason, r.confidence, r.status, r.created_at,
+                r.estimated_yield_bushels, r.days_remaining,
+                r.crop_health_rating, r.crop_health_summary,
                 COALESCE(z.label, '') AS zone_label
             FROM recommendations r
             LEFT JOIN zones z ON z.id = r.zone_id
@@ -89,6 +91,8 @@ async def update_recommendation(
             UPDATE recommendations SET status = $1 WHERE id = $2
             RETURNING id, field_id, zone_id, action_type, urgency,
                       reason, confidence, status, created_at,
+                      estimated_yield_bushels, days_remaining,
+                      crop_health_rating, crop_health_summary,
                       (SELECT label FROM zones WHERE id = zone_id) AS zone_label
             """,
             body.status,
@@ -122,4 +126,8 @@ def _row_to_rec(row: dict) -> RecommendationResponse:
         confidence=row["confidence"],
         status=row["status"],
         created_at=row["created_at"],
+        estimated_yield_bushels=row.get("estimated_yield_bushels") or 0.0,
+        days_remaining=row.get("days_remaining") if row.get("days_remaining") is not None else -1,
+        crop_health_rating=row.get("crop_health_rating") or 0,
+        crop_health_summary=row.get("crop_health_summary") or "",
     )

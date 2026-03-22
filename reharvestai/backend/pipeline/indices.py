@@ -5,6 +5,7 @@ Formulas (raw range −1 to +1, stored as 0–100 after normalization):
   NDVI = (B08 − B04) / (B08 + B04)  → vegetation health / ripeness
   NDWI = (B03 − B08) / (B03 + B08)  → water stress
   NDRE = (B8A − B05) / (B8A + B05)  → early stress (more sensitive than NDVI)
+  EVI2 = 2.5 * (B08 − B04) / (B08 + 2.4*B04 + 1)  → enhanced vegetation, no blue band needed
 """
 from __future__ import annotations
 
@@ -19,13 +20,13 @@ _REFL_SCALE = 10_000.0
 # ─── Public API ──────────────────────────────────────────────────────────────
 
 def compute_pixel_indices(bands: BandArrays) -> dict[str, np.ndarray]:
-    """Compute NDVI, NDWI, NDRE for every pixel.
+    """Compute NDVI, NDWI, NDRE, and EVI2 for every pixel.
 
     Args:
         bands: Dict mapping band name → (H, W) float32 array (raw uint16 values).
 
     Returns:
-        Dict with keys "ndvi", "ndwi", "ndre", each a (H, W) float32 array
+        Dict with keys "ndvi", "ndwi", "ndre", "evi", each a (H, W) float32 array
         in the range [0, 100]. Pixels where the denominator is zero are NaN.
     """
     # Scale to physical reflectance (0.0–1.0 range).
@@ -33,6 +34,7 @@ def compute_pixel_indices(bands: BandArrays) -> dict[str, np.ndarray]:
         arr = bands[name] / _REFL_SCALE
         return arr.astype(np.float32)
 
+    b02 = _refl("B02")  # blue band (already fetched by sentinel.py)
     b03 = _refl("B03")
     b04 = _refl("B04")
     b05 = _refl("B05")
@@ -43,10 +45,17 @@ def compute_pixel_indices(bands: BandArrays) -> dict[str, np.ndarray]:
     ndwi = _ratio(b03, b08)
     ndre = _ratio(b8a, b05)
 
+    # EVI2 (two-band EVI, more accurate for dense canopies than NDVI)
+    numer = 2.5 * (b08 - b04)
+    denom = b08 + 2.4 * b04 + 1.0
+    with np.errstate(invalid="ignore", divide="ignore"):
+        evi2_raw = np.where(denom != 0, numer / denom, np.nan).astype(np.float32)
+
     return {
         "ndvi": normalize_index(ndvi),
         "ndwi": normalize_index(ndwi),
         "ndre": normalize_index(ndre),
+        "evi": normalize_index(evi2_raw),
     }
 
 
@@ -57,11 +66,11 @@ def compute_mask_mean_scores(
     """Compute the mean of each index over pixels where mask is True.
 
     Args:
-        index_arrays: {"ndvi": arr, "ndwi": arr, "ndre": arr} — values 0–100.
+        index_arrays: {"ndvi": arr, "ndwi": arr, "ndre": arr, "evi": arr} — values 0–100.
         mask: Boolean (H, W) array selecting pixels to average.
 
     Returns:
-        {"ndvi": float, "ndwi": float, "ndre": float}  — means in [0, 100].
+        {"ndvi": float, "ndwi": float, "ndre": float, "evi": float}  — means in [0, 100].
         Fully-masked (all NaN) zones return 0.0 as a safe fallback.
     """
     result: dict[str, float] = {}

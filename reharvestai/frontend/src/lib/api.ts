@@ -106,11 +106,18 @@ function generateZones(field: Field): Zone[] {
   });
 }
 
+const MOCK_HEALTH_SUMMARIES = [
+  "This zone shows strong chlorophyll retention with NDRE at 81/100 and EVI confirming dense healthy canopy. Harvest timing is optimal in the next 3-4 days to capture peak quality.",
+  "NDWI readings at 58/100 suggest moderate water stress that has not yet impacted yield potential. NDRE is showing early decline — plan harvest within the week.",
+  "Significant stress is evident across all indices with NDRE at 42/100 indicating chlorophyll decline. Immediate inspection recommended to determine if drought or disease is the cause.",
+  "All vegetation indices are critically low with NDVI at 22/100 and NDRE at 18/100 indicating severe crop loss. Immediate intervention required to salvage remaining yield.",
+];
+
 function generateRecommendations(field: Field, zones: Zone[]): Recommendation[] {
-  return ZONE_PROFILES.map((profile, i) => {
-    const zone = zones[i];
+  return ZONE_PROFILES.map((profile, index) => {
+    const zone = zones[index];
     return {
-      id: `rec-${String(i + 1).padStart(3, "0")}`,
+      id: `rec-${String(index + 1).padStart(3, "0")}`,
       field_id: field.id,
       zone_id: zone.id,
       zone_label: profile.label,
@@ -119,7 +126,11 @@ function generateRecommendations(field: Field, zones: Zone[]): Recommendation[] 
       reason: profile.reason,
       confidence: profile.confidence,
       status: "pending" as const,
-      created_at: `2026-03-20T08:${String(i * 5).padStart(2, "0")}:00Z`,
+      created_at: `2026-03-20T08:${String(index * 5).padStart(2, "0")}:00Z`,
+      estimated_yield_bushels: Math.round(50 + Math.random() * 150),
+      days_remaining: [3, 7, -1, 0][index % 4],
+      crop_health_rating: [8, 6, 4, 2][index % 4],
+      crop_health_summary: MOCK_HEALTH_SUMMARIES[index % 4],
     };
   });
 }
@@ -281,4 +292,24 @@ export async function getAgentTrace(fieldId: string): Promise<AgentTrace> {
     return generateAgentTrace(mockField!, mockZones!);
   }
   return apiFetch<AgentTrace>(`/fields/${fieldId}/agent/trace`);
+}
+
+// ─── Commodity prices & revenue helpers ──────────────────────────────────────
+
+export const COMMODITY_PRICES: Record<string, number> = {
+  corn: 4.50,   // $/bushel
+  wheat: 5.50,
+  soy: 10.50,
+  cotton: 0,    // sold by weight, skip
+  rice: 0,      // sold by weight, skip
+};
+
+export function estimatedRevenueAtRisk(
+  estimatedYieldBushels: number,
+  cropType: string,
+  confidence: number
+): number {
+  const price = COMMODITY_PRICES[cropType.toLowerCase()] ?? 0;
+  if (!price || !estimatedYieldBushels) return 0;
+  return Math.round(estimatedYieldBushels * price * confidence);
 }

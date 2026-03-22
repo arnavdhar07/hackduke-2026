@@ -52,6 +52,37 @@ _TOOL_SCHEMA = {
                             "type": "string",
                             "description": "Empty string if no risk; otherwise a short explanation.",
                         },
+                        "days_remaining": {
+                            "type": "integer",
+                            "description": (
+                                "Estimated days until harvest window closes. "
+                                "For harvest_now: days before quality degrades. "
+                                "For approaching: days until harvest window opens. "
+                                "For not_ready: -1. For past_peak/stressed: 0."
+                            ),
+                            "minimum": -1,
+                        },
+                        "crop_health_rating": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 10,
+                            "description": (
+                                "Overall crop health 1-10. "
+                                "1-3: severe stress or dying. "
+                                "4-5: significant stress, yield loss likely. "
+                                "6-7: moderate health, some concerns. "
+                                "8-9: healthy with good yield potential. "
+                                "10: peak condition."
+                            ),
+                        },
+                        "crop_health_summary": {
+                            "type": "string",
+                            "description": (
+                                "Exactly 2 plain-English sentences explaining the crop health "
+                                "for this zone, referencing specific index values and what they "
+                                "mean for a farmer."
+                            ),
+                        },
                     },
                     "required": [
                         "zone_id",
@@ -60,6 +91,9 @@ _TOOL_SCHEMA = {
                         "confidence",
                         "urgency",
                         "risk_reason",
+                        "days_remaining",
+                        "crop_health_rating",
+                        "crop_health_summary",
                     ],
                 },
             }
@@ -90,13 +124,15 @@ def _build_user_message(state: AgentState) -> str:
     for z in zones:
         lines += [
             f"",
-            f"  Zone ID : {z['zone_id']}",
-            f"  Label   : {z['label']}",
-            f"  NDVI    : {z['ndvi']:.4f}  (higher = more green biomass; typical harvest range 0.6–0.8)",
-            f"  NDWI    : {z['ndwi']:.4f}  (water content; high values may indicate over-irrigation)",
-            f"  NDRE    : {z['ndre']:.4f}  (red-edge; sensitive to chlorophyll / crop stress)",
-            f"  NDVI Δ7d: {z['ndvi_delta']:+.4f}  (change vs 7 days ago; negative = senescence/stress)",
-            f"  Captured: {z['captured_at']}",
+            f"  Zone ID  : {z['zone_id']}",
+            f"  Label    : {z['label']}",
+            f"  NDVI     : {z['ndvi']:.1f}/100  (greenness/biomass — saturates at high density; best 40-80 range)",
+            f"  EVI      : {z['evi']:.1f}/100   (enhanced vegetation — more accurate than NDVI for dense canopies)",
+            f"  NDWI     : {z['ndwi']:.1f}/100  (water stress — low values mean drought or over-maturity)",
+            f"  NDRE     : {z['ndre']:.1f}/100  (chlorophyll/early stress — drops 2-3 weeks before NDVI decline)",
+            f"  NDVI Δ7d : {z['ndvi_delta']:+.1f}   (change vs 7 days ago — negative = senescence/stress onset)",
+            f"  Zone area: {z['zone_area_acres']:.1f} acres",
+            f"  Captured : {z['captured_at']}",
         ]
 
     lines += [
@@ -106,6 +142,15 @@ def _build_user_message(state: AgentState) -> str:
         f"  - urgency options: low | medium | high | critical",
         f"  - risk_reason: empty string unless you see a specific risk to flag",
         f"  - confidence: your certainty as a float 0.0–1.0",
+        f"  - Use all 4 vegetation indices together. NDRE declining while NDVI stable = early stress.",
+        f"    EVI dropping while NDVI holds = dense canopy maturity signal.",
+        f"  - Estimate days_remaining based on rate of NDVI decline (ndvi_delta):",
+        f"    if declining at X/week, project to threshold of 40.",
+        f"    For harvest_now: days before quality degrades (0–7 typical).",
+        f"    For approaching: days until harvest window opens.",
+        f"    For not_ready: use -1. For past_peak/stressed: use 0.",
+        f"  - crop_health_rating: 1-10 overall score based on all indices.",
+        f"  - crop_health_summary: exactly 2 sentences referencing specific index values.",
         f"  Return one classification object for every zone listed above.",
     ]
 
@@ -152,6 +197,9 @@ async def zone_classifier(state: AgentState) -> AgentState:
                 confidence=float(c["confidence"]),
                 urgency=str(c["urgency"]),
                 risk_reason=str(c.get("risk_reason", "")),
+                days_remaining=int(c.get("days_remaining", -1)),
+                crop_health_rating=int(c.get("crop_health_rating", 5)),
+                crop_health_summary=str(c.get("crop_health_summary", "")),
             )
         )
 
@@ -169,6 +217,8 @@ async def zone_classifier(state: AgentState) -> AgentState:
                     "status": c["status"],
                     "urgency": c["urgency"],
                     "confidence": c["confidence"],
+                    "days_remaining": c["days_remaining"],
+                    "crop_health_rating": c["crop_health_rating"],
                 }
                 for c in zone_classifications
             ]

@@ -39,6 +39,11 @@ export interface Recommendation {
   confidence: number;
   status: RecommendationStatus;
   created_at: string;
+  // New fields from backend
+  estimated_yield_bushels: number;   // 0 if unknown
+  days_remaining: number;            // -1 if N/A, 0 if past peak
+  crop_health_rating: number;        // 1-10, 0 if unknown
+  crop_health_summary: string;       // AI natural language health summary
 }
 
 export interface AgentNode {

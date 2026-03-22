@@ -18,6 +18,16 @@ async def init_db_pool() -> None:
         command_timeout=30,
     )
 
+    # Add new recommendation columns if they don't exist (idempotent migration)
+    async with pool.acquire() as conn:
+        await conn.execute("""
+            ALTER TABLE recommendations
+                ADD COLUMN IF NOT EXISTS estimated_yield_bushels FLOAT DEFAULT 0.0,
+                ADD COLUMN IF NOT EXISTS days_remaining INTEGER DEFAULT -1,
+                ADD COLUMN IF NOT EXISTS crop_health_rating INTEGER DEFAULT 0,
+                ADD COLUMN IF NOT EXISTS crop_health_summary TEXT DEFAULT ''
+        """)
+
 
 async def close_db_pool() -> None:
     """Gracefully close the connection pool.  Called during app lifespan shutdown."""

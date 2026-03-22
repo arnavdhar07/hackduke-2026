@@ -33,8 +33,9 @@ from app.config import settings
 
 _SQL_INSERT_RECOMMENDATION = """
     INSERT INTO recommendations
-        (field_id, zone_id, action_type, urgency, reason, confidence)
-    VALUES ($1, $2, $3, $4, $5, $6)
+        (field_id, zone_id, action_type, urgency, reason, confidence,
+         estimated_yield_bushels, days_remaining, crop_health_rating, crop_health_summary)
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 """
 
 _SQL_INSERT_ALERT = """
@@ -104,6 +105,10 @@ async def output_formatter(state: AgentState) -> AgentState:
                         rec["urgency"],
                         rec["reason"],
                         rec["confidence"],
+                        rec.get("estimated_yield_bushels", 0.0),
+                        rec.get("days_remaining", -1),
+                        rec.get("crop_health_rating", 0),
+                        rec.get("crop_health_summary", ""),
                     )
                     inserted_recommendations += 1
 

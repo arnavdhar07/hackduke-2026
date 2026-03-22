@@ -3,10 +3,10 @@
 import { useState, useEffect } from 'react';
 import { useParams } from 'next/navigation';
 import dynamic from 'next/dynamic';
-import { getField } from '@/lib/api';
+import { getField, estimatedRevenueAtRisk } from '@/lib/api';
 import { useZones } from '@/hooks/useZones';
 import { useRecommendations } from '@/hooks/useRecommendations';
-import type { Field, Zone } from '@/types/api';
+import type { Field, Zone, Recommendation } from '@/types/api';
 import { DEFAULT_CENTER, DEFAULT_ZOOM } from '@/lib/mapbox';
 import { ndviColor } from '@/lib/colors';
 import { Progress, ProgressTrack, ProgressIndicator } from '@/components/ui/progress';
@@ -191,6 +191,15 @@ export default function DashboardPage() {
     ? Math.floor((Date.now() - new Date(zones[0].latest_scores.captured_at).getTime()) / 86_400_000)
     : null;
 
+  // Total revenue at risk for pending recommendations
+  const totalRevAtRisk = recommendations
+    .filter(r => r.status === 'pending')
+    .reduce((sum, rec) => sum + estimatedRevenueAtRisk(
+      rec.estimated_yield_bushels ?? 0,
+      field?.crop_type ?? '',
+      rec.confidence
+    ), 0);
+
   // Waste reduction: accepted recs × rough tonnes saved per action
   const acceptedCount = recommendations.filter(r => r.status === 'accepted').length;
   const estTonnesSaved = +(acceptedCount * 3.2).toFixed(1);
@@ -256,6 +265,14 @@ export default function DashboardPage() {
               value={daysSincePass !== null ? `${daysSincePass}d` : '—'}
               accent={daysSincePass !== null && daysSincePass > 4 ? 'text-amber-400' : 'text-gray-300'}
             />
+            {totalRevAtRisk > 0 && (
+              <StatPill
+                label="$ at risk"
+                value={`$${(totalRevAtRisk / 1000).toFixed(1)}k`}
+                accent="text-red-400"
+                critical
+              />
+            )}
           </div>
 
           {/* Season progress */}
@@ -302,6 +319,23 @@ export default function DashboardPage() {
           </div>
         </div>
       </div>
+
+      {/* ── Data freshness warning ──────────────────────────────────────────── */}
+      {daysSincePass !== null && daysSincePass >= 7 && (
+        <div className={`shrink-0 px-4 py-2 flex items-center gap-2 text-xs ${
+          daysSincePass >= 14
+            ? 'bg-red-950/40 border-b border-red-500/20 text-red-300'
+            : 'bg-amber-950/40 border-b border-amber-500/20 text-amber-300'
+        }`}>
+          <span>{daysSincePass >= 14 ? '⚠️' : '⚠'}</span>
+          <span>
+            Satellite imagery is <strong>{daysSincePass} days old</strong>
+            {daysSincePass >= 14
+              ? ' — recommendations may be significantly less accurate. Cloud cover may be blocking new observations.'
+              : ' — check back soon for updated imagery.'}
+          </span>
+        </div>
+      )}
 
       {/* ── Map + sidebar row ───────────────────────────────────────────────── */}
       <div className="flex flex-1 min-h-0">
