@@ -297,9 +297,14 @@ export async function getAgentTrace(fieldId: string): Promise<AgentTrace> {
 // ─── Commodity prices & revenue helpers ──────────────────────────────────────
 
 export const COMMODITY_PRICES: Record<string, number> = {
-  corn: 4.50,   // $/bushel
+  corn: 4.50,
   wheat: 5.50,
   soy: 10.50,
+  soybeans: 10.50,
+  potato: 8.00,
+  potatoes: 8.00,
+  barley: 4.80,
+  oats: 3.50,
   cotton: 0,    // sold by weight, skip
   rice: 0,      // sold by weight, skip
 };
@@ -309,7 +314,7 @@ export function estimatedRevenueAtRisk(
   cropType: string,
   confidence: number
 ): number {
-  const price = COMMODITY_PRICES[cropType.toLowerCase()] ?? 0;
+  const price = COMMODITY_PRICES[cropType.toLowerCase()] ?? 6.00; // generic fallback $/bu
   if (!price || !estimatedYieldBushels) return 0;
   return Math.round(estimatedYieldBushels * price * confidence);
 }
