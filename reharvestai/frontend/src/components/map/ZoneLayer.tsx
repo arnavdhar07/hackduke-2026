@@ -160,6 +160,8 @@ export default function ZoneLayer({ fieldId, onZoneSelect, selectedZoneId }: Zon
     }
 
     return () => {
+      // Guard: map may have been destroyed already (e.g. navigating away)
+      if (!map || !map.isStyleLoaded()) return;
       zones.forEach((zone) => {
         const fillId = `${zone.id}-fill`;
         const glowId = `${zone.id}-glow`;
