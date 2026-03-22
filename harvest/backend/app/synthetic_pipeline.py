@@ -190,6 +190,12 @@ async def _seed_zones(field_id: str) -> None:
 
     async with pool.acquire() as conn:
         async with conn.transaction():
+            # Delete old zones (cascades to ndvi_timeseries and recommendations)
+            # so each run starts from a clean slate with no stale/duplicate data.
+            await conn.execute(
+                "DELETE FROM zones WHERE field_id = $1", field_uuid
+            )
+
             for i, (w, s, e, n) in enumerate(quads):
                 profile = zone_profiles[i]
                 zone_id = uuid.uuid4()
