@@ -72,7 +72,10 @@ class RecommendationResponse(BaseModel):
     reason: str
     confidence: float
     status: str
-    estimated_yield_bushels: float | None = None
+    estimated_yield_bushels: float = 0.0
+    days_remaining: int = -1
+    crop_health_rating: int = 0
+    crop_health_summary: str = ""
     created_at: datetime
 
 

@@ -41,15 +41,19 @@ CREATE INDEX ndvi_zone_time_idx ON ndvi_timeseries(zone_id, captured_at DESC);
 
 -- ─── Recommendations ─────────────────────────────────────────────────────────
 CREATE TABLE recommendations (
-    id          uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
-    field_id    uuid        NOT NULL REFERENCES fields(id) ON DELETE CASCADE,
-    zone_id     uuid        REFERENCES zones(id) ON DELETE SET NULL,
-    action_type text        NOT NULL,
-    urgency     text        NOT NULL,
-    reason      text        NOT NULL,
-    confidence  float       NOT NULL,
-    status      text        NOT NULL DEFAULT 'pending',
-    created_at  timestamptz NOT NULL DEFAULT now()
+    id                   uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
+    field_id             uuid        NOT NULL REFERENCES fields(id) ON DELETE CASCADE,
+    zone_id              uuid        REFERENCES zones(id) ON DELETE SET NULL,
+    action_type          text        NOT NULL,
+    urgency              text        NOT NULL,
+    reason               text        NOT NULL,
+    confidence           float       NOT NULL,
+    status               text        NOT NULL DEFAULT 'pending',
+    estimated_yield_bushels float    DEFAULT 0,
+    days_remaining       integer     DEFAULT -1,
+    crop_health_rating   integer     DEFAULT 0,
+    crop_health_summary  text        DEFAULT '',
+    created_at           timestamptz NOT NULL DEFAULT now()
 );
 CREATE INDEX recs_field_status_idx ON recommendations(field_id, status);
 
