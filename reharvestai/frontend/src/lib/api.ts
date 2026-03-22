@@ -355,3 +355,8 @@ export async function completeTodo(id: string): Promise<Todo> {
 export async function triggerAnalysis(fieldId: string): Promise<void> {
   await fetch(`${API_BASE}/fields/${fieldId}/analyze`, { method: 'POST' });
 }
+
+export async function deleteField(fieldId: string): Promise<void> {
+  const res = await fetch(`${API_BASE}/fields/${fieldId}`, { method: 'DELETE' });
+  if (!res.ok && res.status !== 404) throw new Error('Failed to delete field');
+}

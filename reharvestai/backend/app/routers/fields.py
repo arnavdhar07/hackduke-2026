@@ -121,6 +121,19 @@ async def list_fields() -> list[FieldResponse]:
 
 
 # ---------------------------------------------------------------------------
+# DELETE /fields/{field_id} — delete a field and its cascaded data
+# ---------------------------------------------------------------------------
+
+@router.delete("/{field_id}", status_code=204)
+async def delete_field(field_id: uuid.UUID) -> None:
+    """Delete a field and all associated zones, timeseries, recommendations, alerts."""
+    pool = await database.get_pool()
+    result = await pool.execute("DELETE FROM fields WHERE id = $1", field_id)
+    if result == "DELETE 0":
+        raise HTTPException(status_code=404, detail=f"Field {field_id} not found")
+
+
+# ---------------------------------------------------------------------------
 # POST /fields/{field_id}/analyze — re-run the satellite pipeline
 # ---------------------------------------------------------------------------
 

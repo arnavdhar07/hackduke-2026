@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { listFields, triggerAnalysis } from '@/lib/api';
+import { listFields, triggerAnalysis, deleteField } from '@/lib/api';
 import { useTodos } from '@/hooks/useTodos';
 import { MAPBOX_TOKEN } from '@/lib/mapbox';
 import type { Field } from '@/types/api';
@@ -36,11 +36,26 @@ export default function FieldsDashboard() {
   const [fields, setFields] = useState<Field[]>([]);
   const [loading, setLoading] = useState(true);
   const [showTodos, setShowTodos] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const { pending, todos, markDone } = useTodos();
 
   useEffect(() => {
     listFields().then(setFields).catch(console.error).finally(() => setLoading(false));
   }, []);
+
+  async function handleDelete(e: React.MouseEvent, fieldId: string) {
+    e.stopPropagation();
+    if (!confirm('Delete this field and all its data? This cannot be undone.')) return;
+    setDeletingId(fieldId);
+    try {
+      await deleteField(fieldId);
+      setFields(prev => prev.filter(f => f.id !== fieldId));
+    } catch {
+      alert('Failed to delete field.');
+    } finally {
+      setDeletingId(null);
+    }
+  }
 
   async function openField(field: Field) {
     // Trigger a fresh analysis in the background, then navigate
@@ -177,6 +192,23 @@ export default function FieldsDashboard() {
                       className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                       onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }}
                     />
+                    {/* Delete button */}
+                    <button
+                      onClick={e => handleDelete(e, field.id)}
+                      disabled={deletingId === field.id}
+                      className="absolute top-2 left-2 p-1.5 rounded-lg bg-gray-900/70 backdrop-blur-sm text-gray-400 hover:text-red-400 hover:bg-red-950/70 transition-colors opacity-0 group-hover:opacity-100"
+                      title="Delete field"
+                    >
+                      {deletingId === field.id ? (
+                        <svg className="w-3.5 h-3.5 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <circle cx="12" cy="12" r="10" strokeOpacity=".25"/><path d="M12 2a10 10 0 0 1 10 10" strokeLinecap="round"/>
+                        </svg>
+                      ) : (
+                        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-3.5 h-3.5">
+                          <path d="M3 4h10M6 4V2.5h4V4M5 4l.5 9h5L11 4" strokeLinecap="round" strokeLinejoin="round"/>
+                        </svg>
+                      )}
+                    </button>
                     {/* Todo badge */}
                     {fieldTodos.length > 0 && (
                       <div className="absolute top-2 right-2 px-2 py-1 bg-red-600/90 rounded-lg text-[10px] font-bold text-white backdrop-blur-sm">
