@@ -4,7 +4,7 @@ import { useState } from 'react';
 import Badge from '@/app/ui/Badge';
 import Sparkline from '@/app/ui/Sparkline';
 import { Progress, ProgressTrack, ProgressIndicator } from '@/components/ui/progress';
-import { patchRecommendation, estimatedRevenueAtRisk } from '@/lib/api';
+import { patchRecommendation } from '@/lib/api';
 import { URGENCY_COLOR } from '@/lib/colors';
 import type { Recommendation, Zone, WeatherForecast } from '@/types/api';
 import { useQueryClient } from '@tanstack/react-query';
@@ -79,10 +79,6 @@ export default function RecommendationCard({
   const hrs = showCountdown ? hoursUntilRain(forecast!) : null;
   const acres = zone ? polygonAcres(zone.polygon) : null;
 
-  const revenueAtRisk = rec.estimated_yield_bushels > 0
-    ? estimatedRevenueAtRisk(rec.estimated_yield_bushels, cropType ?? '', rec.confidence)
-    : 0;
-
   return (
     <div
       className="rounded-xl p-4 flex flex-col gap-3 border border-[#2a3045] border-l-[3px]"
@@ -104,7 +100,7 @@ export default function RecommendationCard({
       </div>
 
       {/* Urgency badges row */}
-      {(hrs !== null || acres !== null || rec.days_remaining >= 0 || rec.crop_health_rating > 0 || revenueAtRisk > 0) && (
+      {(hrs !== null || acres !== null || rec.days_remaining >= 0 || rec.crop_health_rating > 0) && (
         <div className="flex gap-1.5 flex-wrap">
           {hrs !== null && (
             <span className="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-blue-900/50 border border-blue-700/50 text-blue-300 whitespace-nowrap">
@@ -135,11 +131,6 @@ export default function RecommendationCard({
               : 'bg-green-900/40 border-green-700/40 text-green-300'
             }`}>
               Health {rec.crop_health_rating}/10
-            </span>
-          )}
-          {revenueAtRisk > 0 && (
-            <span className="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-emerald-900/40 border border-emerald-700/40 text-emerald-300 whitespace-nowrap">
-              ~${revenueAtRisk.toLocaleString()} at risk
             </span>
           )}
         </div>

@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useRecommendations } from '@/hooks/useRecommendations';
 import { useZones } from '@/hooks/useZones';
-import { getWeatherForecast, estimatedRevenueAtRisk } from '@/lib/api';
+import { getWeatherForecast } from '@/lib/api';
 import RecommendationCard from './RecommendationCard';
 import CommunityImpactPanel from './CommunityImpactPanel';
 import WeatherStrip from '@/app/ui/WeatherStrip';
@@ -60,11 +60,6 @@ export default function ActionQueue({ fieldId, cropType = 'corn', fieldName = ''
     ? new Date(dataUpdatedAt).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
     : null;
 
-  // Total revenue at risk across all pending recommendations
-  const totalRevenueAtRisk = active.reduce((sum, rec) => {
-    return sum + estimatedRevenueAtRisk(rec.estimated_yield_bushels ?? 0, cropType ?? '', rec.confidence);
-  }, 0);
-
   // Pipeline is still running: fetched at least once but got zero results
   const isPipelineRunning = !isLoading && !isError && recommendations.length === 0;
 
@@ -119,17 +114,6 @@ export default function ActionQueue({ fieldId, cropType = 'corn', fieldName = ''
 
       {/* Weather strip */}
       {forecast && <WeatherStrip days={forecast.days} />}
-
-      {/* Revenue at risk summary */}
-      {totalRevenueAtRisk > 0 && (
-        <div className="mx-4 mt-3 px-4 py-3 rounded-xl border border-red-500/20 bg-red-950/20 flex items-center justify-between">
-          <div>
-            <p className="text-xs font-bold text-white">Revenue at risk</p>
-            <p className="text-[10px] text-gray-400 mt-0.5">Across {active.length} pending actions</p>
-          </div>
-          <span className="text-xl font-bold text-red-400">${totalRevenueAtRisk.toLocaleString()}</span>
-        </div>
-      )}
 
       {/* Filter bar */}
       <div className="px-4 pt-3 pb-2 border-b border-[#2a3045] flex flex-col gap-2">

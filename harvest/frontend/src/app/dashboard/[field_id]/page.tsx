@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
-import { getField, estimatedRevenueAtRisk } from '@/lib/api';
+import { getField } from '@/lib/api';
 import { useZones } from '@/hooks/useZones';
 import { useRecommendations } from '@/hooks/useRecommendations';
 import type { Field, Zone, Recommendation } from '@/types/api';
@@ -169,15 +169,6 @@ export default function DashboardPage() {
     ? Math.floor((Date.now() - new Date(zones[0].latest_scores.captured_at).getTime()) / 86_400_000)
     : null;
 
-  // Total revenue at risk for pending recommendations
-  const totalRevAtRisk = recommendations
-    .filter(r => r.status === 'pending')
-    .reduce((sum, rec) => sum + estimatedRevenueAtRisk(
-      rec.estimated_yield_bushels ?? 0,
-      field?.crop_type ?? '',
-      rec.confidence
-    ), 0);
-
   // Waste reduction: accepted recs × rough tonnes saved per action
   const acceptedCount = recommendations.filter(r => r.status === 'accepted').length;
   const estTonnesSaved = +(acceptedCount * 3.2).toFixed(1);
@@ -244,14 +235,6 @@ export default function DashboardPage() {
               value={daysSincePass !== null ? `${daysSincePass}d` : '—'}
               accent={daysSincePass !== null && daysSincePass > 4 ? 'text-amber-400' : 'text-gray-300'}
             />
-            {totalRevAtRisk > 0 && (
-              <StatPill
-                label="$ at risk"
-                value={`$${(totalRevAtRisk / 1000).toFixed(1)}k`}
-                accent="text-red-400"
-                critical
-              />
-            )}
           </div>
 
           {/* Actions pushed right */}
