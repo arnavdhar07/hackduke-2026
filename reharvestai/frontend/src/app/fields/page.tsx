@@ -69,7 +69,7 @@ export default function FieldsDashboard() {
       <div className="border-b border-[#2a3045] px-6 py-4 flex items-center justify-between" style={{ backgroundColor: '#0d1117' }}>
         <div className="flex items-center gap-3">
           <span className="text-green-400 text-xl">◈</span>
-          <span className="text-white font-bold text-lg tracking-tight">ReHarvestAI</span>
+          <Link href="/" className="text-white font-bold text-lg tracking-tight hover:opacity-70 transition-opacity">ReHarvestAI</Link>
         </div>
         <div className="flex items-center gap-3">
           {/* Notification bell */}

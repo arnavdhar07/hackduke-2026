@@ -12,9 +12,9 @@ const Nav = React.memo(function Nav() {
   return (
     <header className="fixed top-0 inset-x-0 z-50 border-b border-gray-800/50 bg-black/80 backdrop-blur-md">
       <nav className="max-w-6xl mx-auto px-6 py-3.5 flex items-center justify-between relative">
-        <span className="text-xl font-bold tracking-tight text-white">
+        <Link href="/" className="text-xl font-bold tracking-tight text-white hover:opacity-80 transition-opacity">
           ReHarvest<span className="text-green-400">AI</span>
-        </span>
+        </Link>
 
         {/* Center links */}
         <div className="hidden md:flex items-center gap-8 absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
