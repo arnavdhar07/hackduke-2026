@@ -44,7 +44,7 @@ export default function OnboardingPage() {
 
       {/* Form overlay */}
       <div className="absolute bottom-6 left-6 z-10 w-80 bg-gray-900/90 backdrop-blur-sm border border-gray-700 rounded-xl p-5 shadow-2xl">
-        <h1 className="text-lg font-bold text-white mb-1"><a href="/" className="hover:opacity-70 transition-opacity">ReHarvestAI</a></h1>
+        <h1 className="text-lg font-bold text-white mb-1"><a href="/" className="hover:opacity-70 transition-opacity">Harvest</a></h1>
         <p className="text-xs text-gray-400 mb-4">
           Draw your field on the map, then fill in the details below.
         </p>

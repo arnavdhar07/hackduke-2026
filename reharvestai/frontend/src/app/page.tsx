@@ -13,7 +13,7 @@ const Nav = React.memo(function Nav() {
     <header className="fixed top-0 inset-x-0 z-50 border-b border-gray-800/50 bg-black/80 backdrop-blur-md">
       <nav className="max-w-6xl mx-auto px-6 py-3.5 flex items-center justify-between relative">
         <Link href="/" className="text-xl font-bold tracking-tight text-white hover:opacity-80 transition-opacity">
-          ReHarvest<span className="text-green-400">AI</span>
+          Harvest
         </Link>
 
         {/* Center links */}
@@ -351,7 +351,7 @@ export default function LandingPage() {
               {[
                 {
                   step: '01', title: 'Draw your field',
-                  desc: 'Outline your farm on a satellite map. ReHarvestAI divides it into zones and starts tracking immediately.',
+                  desc: 'Outline your farm on a satellite map. Harvest divides it into zones and starts tracking immediately.',
                   color: 'text-green-400', border: 'border-green-500/30',
                 },
                 {
@@ -458,7 +458,7 @@ export default function LandingPage() {
 
       {/* Footer */}
       <footer className="px-6 py-6 border-t border-gray-800/40 flex flex-col md:flex-row items-center justify-between gap-2 text-xs text-gray-600 max-w-6xl mx-auto">
-        <span>ReHarvest<span className="text-green-400">AI</span> · HackDuke 2026</span>
+        <span>Harvest · HackDuke 2026</span>
         <span>Sentinel-2 · Mapbox · LangGraph</span>
       </footer>
     </main>

@@ -24,7 +24,7 @@ export default function CommunityImpactPanel({ cropType, fieldName }: CommunityI
   const meals   = Math.round(lbs / 1.2);
 
   function mailtoHref() {
-    const subject = encodeURIComponent('Surplus Crop Donation — ReHarvestAI');
+    const subject = encodeURIComponent('Surplus Crop Donation — Harvest');
     const body    = encodeURIComponent(
       `Hi,\n\nI have ${surplus} bushels of surplus ${cropType} available for donation from my farm (${fieldName}). Please contact me to arrange pickup.\n\nThank you.`
     );

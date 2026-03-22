@@ -39,7 +39,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 # ---------------------------------------------------------------------------
 
 app = FastAPI(
-    title="ReHarvestAI API",
+    title="Harvest API",
     description="Precision agriculture backend — field analytics, zone NDVI, AI recommendations.",
     version="1.0.0",
     lifespan=lifespan,

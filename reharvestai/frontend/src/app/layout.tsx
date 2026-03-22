@@ -3,7 +3,7 @@ import './globals.css';
 import Providers from './providers';
 
 export const metadata: Metadata = {
-  title: 'ReHarvestAI',
+  title: 'Harvest',
   description: 'Precision agriculture powered by satellite imagery',
 };
 
