@@ -24,6 +24,7 @@ export default function ZoneLayer({ fieldId, onZoneSelect, selectedZoneId }: Zon
   const map = useMap();
   const { data: zones } = useZones(fieldId);
   const zonesRef = useRef<Zone[]>([]);
+  const hasFitRef = useRef(false);
 
   // Add zone fill/outline/label layers once when map + zones are ready
   useEffect(() => {
@@ -141,6 +142,21 @@ export default function ZoneLayer({ fieldId, onZoneSelect, selectedZoneId }: Zon
           'line-opacity': 1,
         },
       });
+    }
+
+    if (!hasFitRef.current && zones.length > 0) {
+      hasFitRef.current = true;
+      // Compute bounding box of all zone polygons
+      let minLng = Infinity, minLat = Infinity, maxLng = -Infinity, maxLat = -Infinity;
+      zones.forEach((zone) => {
+        zone.polygon.coordinates[0].forEach(([lng, lat]) => {
+          if (lng < minLng) minLng = lng;
+          if (lat < minLat) minLat = lat;
+          if (lng > maxLng) maxLng = lng;
+          if (lat > maxLat) maxLat = lat;
+        });
+      });
+      map.fitBounds([[minLng, minLat], [maxLng, maxLat]], { padding: 80, duration: 800 });
     }
 
     return () => {

@@ -9,7 +9,6 @@ import { useRecommendations } from '@/hooks/useRecommendations';
 import type { Field, Zone, Recommendation } from '@/types/api';
 import { DEFAULT_CENTER, DEFAULT_ZOOM } from '@/lib/mapbox';
 import { ndviColor } from '@/lib/colors';
-import { Progress, ProgressTrack, ProgressIndicator } from '@/components/ui/progress';
 import ActionQueue from '@/app/sidebar/ActionQueue';
 import ZoneSparklines from '@/app/ui/ZoneSparklines';
 import ZoneDetailPanel from '@/app/panels/ZoneDetailPanel';
@@ -19,28 +18,6 @@ const FieldMap = dynamic(() => import('@/components/map/FieldMap'), { ssr: false
 const ZoneLayer = dynamic(() => import('@/components/map/ZoneLayer'), { ssr: false });
 const ZoneTooltip = dynamic(() => import('@/components/map/ZoneTooltip'), { ssr: false });
 const UrgencyPulse = dynamic(() => import('@/components/map/UrgencyPulse'), { ssr: false });
-
-// ─── Crop growth config ───────────────────────────────────────────────────────
-
-const CROP_DAYS: Record<string, number> = {
-  corn: 120, wheat: 100, soy: 130, cotton: 170, rice: 110,
-};
-
-const GROWTH_STAGES = [
-  { label: 'Planted',  pct: 0 },
-  { label: 'Growing',  pct: 0.2 },
-  { label: 'Filling',  pct: 0.55 },
-  { label: 'Harvest',  pct: 0.8 },
-  { label: 'Past peak',pct: 1.0 },
-];
-
-function getSeasonProgress(plantingDate: string, cropType: string) {
-  const totalDays = CROP_DAYS[cropType] ?? 120;
-  const daysElapsed = Math.floor((Date.now() - new Date(plantingDate).getTime()) / 86_400_000);
-  const pct = Math.min(1, Math.max(0, daysElapsed / totalDays));
-  const stageIdx = GROWTH_STAGES.findLastIndex((s) => pct >= s.pct);
-  return { pct, stage: GROWTH_STAGES[Math.max(0, stageIdx)].label, daysElapsed, totalDays };
-}
 
 // ─── Field health donut (pure SVG) ───────────────────────────────────────────
 
@@ -204,16 +181,6 @@ export default function DashboardPage() {
   const acceptedCount = recommendations.filter(r => r.status === 'accepted').length;
   const estTonnesSaved = +(acceptedCount * 3.2).toFixed(1);
 
-  // Season progress
-  const season = field ? getSeasonProgress(field.planting_date, field.crop_type) : null;
-
-  // Milestone markers for season progress
-  const MILESTONES = [
-    { label: 'Planted', pos: 0 },
-    { label: 'Growing', pos: 33 },
-    { label: 'Filling', pos: 66 },
-    { label: 'Harvest', pos: 100 },
-  ];
 
   return (
     <div className="flex flex-col h-screen w-screen overflow-hidden bg-gray-950">
@@ -274,33 +241,6 @@ export default function DashboardPage() {
               />
             )}
           </div>
-
-          {/* Season progress */}
-          {season && (
-            <>
-              <div className="w-px h-10 bg-[#2a3045] shrink-0" />
-              <div className="flex flex-col justify-center min-w-[140px] shrink-0">
-                <div className="flex items-center justify-between mb-1.5">
-                  <span className="text-xs font-semibold text-white">{season.stage}</span>
-                  <span className="text-[10px] text-gray-500">Day {season.daysElapsed}/{season.totalDays}</span>
-                </div>
-                <div className="relative h-2">
-                  <Progress value={Math.round(season.pct * 100)} className="gap-0">
-                    <ProgressTrack className="h-2 rounded-full bg-gray-800">
-                      <ProgressIndicator
-                        className="rounded-full"
-                        style={{ background: 'linear-gradient(to right, #16a34a, #84cc16, #f59e0b, #ef4444)' }}
-                      />
-                    </ProgressTrack>
-                  </Progress>
-                  <div
-                    className="absolute top-1/2 -translate-y-1/2 w-2.5 h-2.5 rounded-full bg-white"
-                    style={{ left: `calc(${Math.round(season.pct * 100)}% - 5px)`, boxShadow: '0 0 5px 2px white' }}
-                  />
-                </div>
-              </div>
-            </>
-          )}
 
           {/* Actions pushed right */}
           <div className="flex items-center gap-2 shrink-0">

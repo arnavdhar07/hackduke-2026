@@ -7,6 +7,7 @@ Zone layout: 2×2 grid of the field bbox, matching the frontend mock profiles.
 """
 from __future__ import annotations
 
+import hashlib
 import logging
 import uuid
 from datetime import datetime, timedelta, timezone
@@ -15,10 +16,10 @@ from app import database
 
 logger = logging.getLogger("api.synthetic_pipeline")
 
-# NDVI/NDWI/NDRE profiles matching the frontend mock zones
+# NDVI/NDWI/NDRE base profiles (used as reference originals for trend scaling).
 # Zone B has a lower ndre to show early chlorophyll stress before NDVI drops.
 # Zone D has a steeper recent decline to produce a larger negative ndvi_delta.
-_ZONE_PROFILES = [
+_ZONE_PROFILES_BASE = [
     {"label": "Zone A", "ndvi": 88.0, "ndwi": 72.0, "ndre": 81.0,
      "trend": [30, 52, 71, 85, 88]},   # NW — healthy
     {"label": "Zone B", "ndvi": 71.0, "ndwi": 58.0, "ndre": 65.0,
@@ -28,6 +29,42 @@ _ZONE_PROFILES = [
     {"label": "Zone D", "ndvi": 22.0, "ndwi": 14.0, "ndre": 18.0,
      "trend": [62, 55, 42, 32, 22]},   # SE — critical (steeper recent decline)
 ]
+
+# Per-zone NDVI/NDWI/NDRE ranges: (min, max) — seed interpolates within these.
+_ZONE_RANGES = [
+    {"ndvi": (80, 92), "ndwi": (65, 78), "ndre": (74, 86)},   # Zone A
+    {"ndvi": (62, 76), "ndwi": (48, 64), "ndre": (58, 70)},   # Zone B
+    {"ndvi": (38, 54), "ndwi": (28, 42), "ndre": (34, 50)},   # Zone C
+    {"ndvi": (14, 28), "ndwi": (9,  20), "ndre": (12, 24)},   # Zone D
+]
+
+
+def _field_seed_factor(field_id: str) -> float:
+    """Return a 0.0–1.0 interpolation factor derived deterministically from field_id."""
+    seed_int = int(hashlib.md5(field_id.encode()).hexdigest()[:8], 16) % 100
+    return seed_int / 99.0
+
+
+def _get_zone_profiles(field_id: str) -> list[dict]:
+    """Build per-field zone profiles by interpolating within agronomic ranges."""
+    t = _field_seed_factor(field_id)
+    profiles = []
+    for base, ranges in zip(_ZONE_PROFILES_BASE, _ZONE_RANGES):
+        ndvi = ranges["ndvi"][0] + t * (ranges["ndvi"][1] - ranges["ndvi"][0])
+        ndwi = ranges["ndwi"][0] + t * (ranges["ndwi"][1] - ranges["ndwi"][0])
+        ndre = ranges["ndre"][0] + t * (ranges["ndre"][1] - ranges["ndre"][0])
+        # Scale trend proportionally so the final trend value matches the new ndvi
+        orig_final_ndvi = base["trend"][-1]
+        scale = ndvi / orig_final_ndvi if orig_final_ndvi != 0 else 1.0
+        trend = [round(v * scale) for v in base["trend"]]
+        profiles.append({
+            "label": base["label"],
+            "ndvi": ndvi,
+            "ndwi": ndwi,
+            "ndre": ndre,
+            "trend": trend,
+        })
+    return profiles
 
 
 async def run_synthetic_pipeline(field_id: str) -> None:
@@ -105,11 +142,12 @@ async def _seed_zones(field_id: str) -> None:
     ]
 
     now = datetime.now(tz=timezone.utc)
+    zone_profiles = _get_zone_profiles(field_id)
 
     async with pool.acquire() as conn:
         async with conn.transaction():
             for i, (w, s, e, n) in enumerate(quads):
-                profile = _ZONE_PROFILES[i]
+                profile = zone_profiles[i]
                 zone_id = uuid.uuid4()
                 quad_wkt = f"POLYGON(({w} {s},{e} {s},{e} {n},{w} {n},{w} {s}))"
 

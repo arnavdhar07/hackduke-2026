@@ -50,6 +50,17 @@ export default function FieldMap({ center, zoom, onMapReady, children }: FieldMa
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Fly to new center when it changes (e.g. after field data loads)
+  const initializedRef = useRef(false);
+  useEffect(() => {
+    if (!mapRef.current) return;
+    if (!initializedRef.current) {
+      initializedRef.current = true;
+      return; // skip the first render — map already initialized at this center
+    }
+    mapRef.current.flyTo({ center, zoom, duration: 800 });
+  }, [center, zoom]);
+
   return (
     <MapContext.Provider value={map}>
       <div className="relative w-full h-full">
