@@ -1,5 +1,5 @@
 """
-tasks.py — Celery tasks for the Harvest satellite pipeline.
+tasks.py — Celery tasks for the ReHarvestAI satellite pipeline.
 
 Task graph:
   dispatch_active_fields   (beat, every 5 days)        ← Person 3
