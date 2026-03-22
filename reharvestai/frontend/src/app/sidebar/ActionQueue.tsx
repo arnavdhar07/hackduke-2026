@@ -65,9 +65,49 @@ export default function ActionQueue({ fieldId, cropType = 'corn', fieldName = ''
     return sum + estimatedRevenueAtRisk(rec.estimated_yield_bushels ?? 0, cropType ?? '', rec.confidence);
   }, 0);
 
-  if (isLoading) {
-    return <div className="p-8 text-center"><p className="text-xs text-gray-500">Loading recommendations…</p></div>;
+  // Pipeline is still running: fetched at least once but got zero results
+  const isPipelineRunning = !isLoading && !isError && recommendations.length === 0;
+
+  if (isLoading || isPipelineRunning) {
+    return (
+      <div className="flex flex-col items-center justify-center gap-4 px-6 py-14 text-center">
+        {/* Animated satellite orbit */}
+        <div className="relative w-14 h-14">
+          <div className="absolute inset-0 rounded-full border border-green-900/40" />
+          <div
+            className="absolute inset-0 rounded-full border-t-2 border-green-500 animate-spin"
+            style={{ animationDuration: '1.4s' }}
+          />
+          <div className="absolute inset-0 flex items-center justify-center">
+            <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.2" className="w-5 h-5 text-green-400">
+              <circle cx="10" cy="10" r="3" fill="currentColor" opacity=".6"/>
+              <path d="M10 2a8 8 0 0 1 8 8" strokeLinecap="round" opacity=".4"/>
+              <path d="M10 18a8 8 0 0 1-8-8" strokeLinecap="round" opacity=".4"/>
+            </svg>
+          </div>
+        </div>
+        <div>
+          <p className="text-sm font-semibold text-white mb-1">Analysing your field</p>
+          <p className="text-xs text-gray-500 leading-relaxed">
+            Fetching satellite imagery and<br />running the AI agent…
+          </p>
+        </div>
+        {/* Animated steps */}
+        <div className="w-full max-w-[200px] flex flex-col gap-1.5 mt-1">
+          {['Fetching satellite data', 'Computing indices', 'Running AI agent'].map((step, i) => (
+            <div key={step} className="flex items-center gap-2">
+              <div
+                className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse shrink-0"
+                style={{ animationDelay: `${i * 0.4}s` }}
+              />
+              <span className="text-[11px] text-gray-500">{step}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
   }
+
   if (isError) {
     return <div className="p-8 text-center"><p className="text-xs text-red-400">Failed to load recommendations.</p></div>;
   }
