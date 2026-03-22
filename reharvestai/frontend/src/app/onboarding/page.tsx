@@ -30,7 +30,7 @@ export default function OnboardingPage() {
         crop_type: cropType,
         planting_date: plantingDate,
       });
-      router.push('/fields');
+      router.push(`/dashboard/${field.id}`);
     } catch (err) {
       setError('Failed to create field. Please try again.');
       setLoading(false);
