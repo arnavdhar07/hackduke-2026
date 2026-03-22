@@ -294,11 +294,15 @@ export default function DashboardPage() {
 
         {/* Map */}
         <div className="flex-1 relative">
-          <FieldMap center={center} zoom={DEFAULT_ZOOM}>
-            <ZoneLayer fieldId={field_id} onZoneSelect={setSelectedZone} selectedZoneId={selectedZone?.id} />
-            <ZoneTooltip fieldId={field_id} />
-            <UrgencyPulse recommendations={recommendations} zones={zones} />
-          </FieldMap>
+          {field ? (
+            <FieldMap center={center} zoom={14}>
+              <ZoneLayer fieldId={field_id} onZoneSelect={setSelectedZone} selectedZoneId={selectedZone?.id} />
+              <ZoneTooltip fieldId={field_id} />
+              <UrgencyPulse recommendations={recommendations} zones={zones} />
+            </FieldMap>
+          ) : (
+            <div className="w-full h-full bg-gray-900 animate-pulse" />
+          )}
         </div>
 
         {/* Sidebar */}
