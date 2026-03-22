@@ -108,14 +108,33 @@ async def _seed_zones(field_id: str) -> None:
             for i, (w, s, e, n) in enumerate(quads):
                 profile = _ZONE_PROFILES[i]
                 zone_id = uuid.uuid4()
-                wkt = f"POLYGON(({w} {s},{e} {s},{e} {n},{w} {n},{w} {s}))"
+                quad_wkt = f"POLYGON(({w} {s},{e} {s},{e} {n},{w} {n},{w} {s}))"
+
+                # Clip the quadrant rectangle to the actual drawn field polygon
+                geom_row = await conn.fetchrow(
+                    """
+                    SELECT
+                        ST_AsText(ST_Intersection(
+                            (SELECT polygon FROM fields WHERE id = $1),
+                            ST_GeomFromText($2, 4326)
+                        )) AS geom,
+                        ST_IsEmpty(ST_Intersection(
+                            (SELECT polygon FROM fields WHERE id = $1),
+                            ST_GeomFromText($2, 4326)
+                        )) AS is_empty
+                    """,
+                    field_uuid, quad_wkt,
+                )
+                if geom_row is None or geom_row["is_empty"]:
+                    logger.info("synthetic_pipeline: quad %d empty intersection, skipping", i)
+                    continue
 
                 await conn.execute(
                     """
                     INSERT INTO zones (id, field_id, polygon, label, created_at)
                     VALUES ($1, $2, ST_GeomFromText($3, 4326), $4, $5)
                     """,
-                    zone_id, field_uuid, wkt, profile["label"], now,
+                    zone_id, field_uuid, geom_row["geom"], profile["label"], now,
                 )
 
                 # 5 timeseries points, spaced 10 days apart, ending now
