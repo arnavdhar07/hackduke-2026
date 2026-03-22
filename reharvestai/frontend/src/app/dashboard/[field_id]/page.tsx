@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import { getField, estimatedRevenueAtRisk } from '@/lib/api';
 import { useZones } from '@/hooks/useZones';
@@ -144,6 +144,7 @@ ${recommendations.map(r => `<tr><td>${r.zone_label}</td><td>${r.action_type}</td
 
 export default function DashboardPage() {
   const { field_id } = useParams<{ field_id: string }>();
+  const router = useRouter();
   const [field, setField] = useState<Field | null>(null);
   const [selectedZone, setSelectedZone] = useState<Zone | null>(null);
 
@@ -188,6 +189,17 @@ export default function DashboardPage() {
       {/* ── Full-width top bar ──────────────────────────────────────────────── */}
       <div className="shrink-0 border-b border-[#2a3045] px-4 py-2.5" style={{ backgroundColor: '#0d1117' }}>
         <div className="flex items-center justify-center gap-3">
+
+          {/* Back button */}
+          <button
+            onClick={() => router.push('/fields')}
+            className="shrink-0 flex items-center gap-1.5 text-gray-400 hover:text-white transition-colors mr-1"
+            title="Back to fields"
+          >
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-4 h-4">
+              <path d="M10 3L5 8l5 5" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+          </button>
 
           {/* Farm identity */}
           <div className="flex items-center gap-3 shrink-0">
