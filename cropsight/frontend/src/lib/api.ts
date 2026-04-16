@@ -99,9 +99,19 @@ function generateZones(field: Field): Zone[] {
         ndvi: profile.ndvi,
         ndwi: profile.ndwi,
         ndre: profile.ndre,
+        evi: Math.round(profile.ndvi * 0.95),
+        gndvi: Math.round(profile.ndvi * 0.93),
+        savi: Math.round(profile.ndvi * 0.9),
+        cig: Math.round(profile.ndre * 0.88),
         captured_at: "2026-03-20T10:00:00Z",
       },
-      timeseries: profile.timeseries,
+      timeseries: profile.timeseries.map((t) => ({
+        ...t,
+        evi: Math.round(t.ndvi * 0.95),
+        gndvi: Math.round(t.ndvi * 0.93),
+        savi: Math.round(t.ndvi * 0.9),
+        cig: Math.round(t.ndre * 0.88),
+      })),
     };
   });
 }
@@ -364,4 +374,31 @@ export async function triggerAnalysis(fieldId: string): Promise<void> {
 export async function deleteField(fieldId: string): Promise<void> {
   const res = await fetch(`${API_BASE}/fields/${fieldId}`, { method: 'DELETE' });
   if (!res.ok && res.status !== 404) throw new Error('Failed to delete field');
+}
+
+// ── Field heatmap ────────────────────────────────────────────────────────────
+
+export interface FieldHeatmap {
+  image_png_b64: string;
+  bounds: [number, number, number, number]; // [min_lng, min_lat, max_lng, max_lat]
+  source: 'synthetic' | 'sentinel2';
+}
+
+export async function getFieldHeatmap(fieldId: string): Promise<FieldHeatmap> {
+  return apiFetch<FieldHeatmap>(`/fields/${fieldId}/heatmap`);
+}
+
+// ── Field boundary detection ─────────────────────────────────────────────────
+
+export interface DetectFieldResult {
+  polygon: import('geojson').Polygon;
+  confidence: number;
+  source: 'sam3' | 'fallback';
+}
+
+export async function detectField(lat: number, lng: number): Promise<DetectFieldResult> {
+  return apiFetch<DetectFieldResult>('/fields/detect', {
+    method: 'POST',
+    body: JSON.stringify({ lat, lng }),
+  });
 }

@@ -15,6 +15,7 @@ export default function OnboardingPage() {
   const [farmName, setFarmName] = useState('');
   const [cropType, setCropType] = useState('');
   const [plantingDate, setPlantingDate] = useState('');
+  const [mode, setMode] = useState<'detect' | 'draw'>('detect');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -40,14 +41,37 @@ export default function OnboardingPage() {
   return (
     <div className="relative w-screen h-screen overflow-hidden">
       {/* Full-screen map */}
-      <MapboxOnboarding onPolygonChange={setPolygon} />
+      <MapboxOnboarding onPolygonChange={setPolygon} mode={mode} />
 
       {/* Form overlay */}
       <div className="absolute bottom-6 left-6 z-10 w-80 bg-gray-900/90 backdrop-blur-sm border border-gray-700 rounded-xl p-5 shadow-2xl">
-        <h1 className="text-lg font-bold text-white mb-1"><a href="/" className="hover:opacity-70 transition-opacity">CropSight</a></h1>
-        <p className="text-xs text-gray-400 mb-4">
-          Draw your field on the map, then fill in the details below.
-        </p>
+        <h1 className="text-lg font-bold text-white mb-3"><a href="/" className="hover:opacity-70 transition-opacity">CropSight</a></h1>
+
+        {/* Mode toggle */}
+        <div className="flex bg-gray-800 rounded-lg p-0.5 mb-4">
+          <button
+            type="button"
+            onClick={() => { setMode('detect'); setPolygon(null); }}
+            className={`flex-1 text-xs py-1.5 rounded-md font-medium transition-colors ${
+              mode === 'detect'
+                ? 'bg-green-600 text-white'
+                : 'text-gray-400 hover:text-gray-200'
+            }`}
+          >
+            Auto-detect
+          </button>
+          <button
+            type="button"
+            onClick={() => { setMode('draw'); setPolygon(null); }}
+            className={`flex-1 text-xs py-1.5 rounded-md font-medium transition-colors ${
+              mode === 'draw'
+                ? 'bg-blue-600 text-white'
+                : 'text-gray-400 hover:text-gray-200'
+            }`}
+          >
+            Draw manually
+          </button>
+        </div>
 
         <form onSubmit={handleSubmit} className="flex flex-col gap-3">
           <div>
@@ -87,7 +111,11 @@ export default function OnboardingPage() {
 
           {/* Polygon status */}
           <div className={`text-xs px-3 py-2 rounded-lg ${polygon ? 'bg-green-900/40 text-green-400' : 'bg-gray-800 text-gray-500'}`}>
-            {polygon ? '✓ Field polygon drawn' : 'Draw a polygon on the map to continue'}
+            {polygon
+              ? '✓ Field boundary selected'
+              : mode === 'detect'
+              ? 'Click the map to auto-detect a field'
+              : 'Draw a polygon on the map'}
           </div>
 
           {error && (

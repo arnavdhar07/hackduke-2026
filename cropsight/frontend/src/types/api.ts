@@ -12,6 +12,10 @@ export interface ZoneScores {
   ndvi: number;
   ndwi: number;
   ndre: number;
+  evi: number;
+  gndvi: number;
+  savi: number;
+  cig: number;
   captured_at: string;
 }
 
@@ -24,7 +28,7 @@ export interface Zone {
   timeseries: ZoneScores[];
 }
 
-export type ActionType = "harvest" | "irrigate" | "monitor" | "inspect";
+export type ActionType = "harvest" | "irrigate" | "monitor" | "inspect" | "fertilize" | "spray" | "scout" | "soil_sample";
 export type Urgency = "low" | "medium" | "high" | "critical";
 export type RecommendationStatus = "pending" | "accepted" | "deferred" | "dismissed";
 

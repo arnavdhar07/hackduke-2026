@@ -82,10 +82,14 @@ async def _get_zones_from_db(field_id: uuid.UUID) -> list[ZoneResponse]:
                 n.ndvi,
                 n.ndwi,
                 n.ndre,
+                COALESCE(n.evi,   0.0) AS evi,
+                COALESCE(n.gndvi, 0.0) AS gndvi,
+                COALESCE(n.savi,  0.0) AS savi,
+                COALESCE(n.cig,   0.0) AS cig,
                 n.captured_at
             FROM zones z
             JOIN LATERAL (
-                SELECT ndvi, ndwi, ndre, captured_at
+                SELECT ndvi, ndwi, ndre, evi, gndvi, savi, cig, captured_at
                 FROM ndvi_timeseries
                 WHERE zone_id = z.id
                 ORDER BY captured_at DESC
@@ -111,7 +115,7 @@ async def _get_zones_from_db(field_id: uuid.UUID) -> list[ZoneResponse]:
         try:
             ts_rows = await pool.fetch(
                 """
-                SELECT ndvi, ndwi, ndre, captured_at
+                SELECT ndvi, ndwi, ndre, COALESCE(evi, 0.0) AS evi, COALESCE(gndvi, 0.0) AS gndvi, COALESCE(savi, 0.0) AS savi, COALESCE(cig, 0.0) AS cig, captured_at
                 FROM ndvi_timeseries
                 WHERE zone_id = $1
                 ORDER BY captured_at DESC
@@ -126,6 +130,10 @@ async def _get_zones_from_db(field_id: uuid.UUID) -> list[ZoneResponse]:
             ndvi=r["ndvi"],
             ndwi=r["ndwi"],
             ndre=r["ndre"],
+            evi=r["evi"],
+            gndvi=r["gndvi"],
+            savi=r["savi"],
+            cig=r["cig"],
             captured_at=r["captured_at"].isoformat() if hasattr(r["captured_at"], "isoformat") else str(r["captured_at"]),
         )
 
@@ -134,6 +142,10 @@ async def _get_zones_from_db(field_id: uuid.UUID) -> list[ZoneResponse]:
                 ndvi=dict(ts)["ndvi"],
                 ndwi=dict(ts)["ndwi"],
                 ndre=dict(ts)["ndre"],
+                evi=dict(ts)["evi"],
+                gndvi=dict(ts)["gndvi"],
+                savi=dict(ts)["savi"],
+                cig=dict(ts)["cig"],
                 captured_at=(
                     dict(ts)["captured_at"].isoformat()
                     if hasattr(dict(ts)["captured_at"], "isoformat")

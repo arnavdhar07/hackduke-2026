@@ -3,7 +3,8 @@
 import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
-import { getField } from '@/lib/api';
+import { getField, getFieldHeatmap } from '@/lib/api';
+import type { FieldHeatmap } from '@/lib/api';
 import { useZones } from '@/hooks/useZones';
 import { useRecommendations } from '@/hooks/useRecommendations';
 import type { Field, Zone, Recommendation } from '@/types/api';
@@ -18,6 +19,7 @@ const FieldMap = dynamic(() => import('@/components/map/FieldMap'), { ssr: false
 const ZoneLayer = dynamic(() => import('@/components/map/ZoneLayer'), { ssr: false });
 const ZoneTooltip = dynamic(() => import('@/components/map/ZoneTooltip'), { ssr: false });
 const UrgencyPulse = dynamic(() => import('@/components/map/UrgencyPulse'), { ssr: false });
+const HeatmapLayer = dynamic(() => import('@/components/map/HeatmapLayer'), { ssr: false });
 
 // ─── Field health donut (pure SVG) ───────────────────────────────────────────
 
@@ -147,6 +149,9 @@ export default function DashboardPage() {
   const router = useRouter();
   const [field, setField] = useState<Field | null>(null);
   const [selectedZone, setSelectedZone] = useState<Zone | null>(null);
+  const [showHeatmap, setShowHeatmap] = useState(false);
+  const [heatmap, setHeatmap] = useState<FieldHeatmap | null>(null);
+  const [heatmapLoading, setHeatmapLoading] = useState(false);
 
   const { data: zones = [] } = useZones(field_id);
   const { recommendations, criticalToast, clearToast } = useRecommendations(field_id);
@@ -155,6 +160,16 @@ export default function DashboardPage() {
     if (!field_id) return;
     getField(field_id).then(setField).catch(console.error);
   }, [field_id]);
+
+  // Fetch heatmap when toggled on (cached server-side so subsequent fetches are instant)
+  useEffect(() => {
+    if (!showHeatmap || heatmap || !field_id) return;
+    setHeatmapLoading(true);
+    getFieldHeatmap(field_id)
+      .then(setHeatmap)
+      .catch(console.error)
+      .finally(() => setHeatmapLoading(false));
+  }, [showHeatmap, field_id, heatmap]);
 
   const center: [number, number] = field
     ? (field.polygon.coordinates[0][0] as [number, number])
@@ -239,6 +254,30 @@ export default function DashboardPage() {
 
           {/* Actions pushed right */}
           <div className="flex items-center gap-2 shrink-0">
+            {/* Heatmap toggle */}
+            <button
+              onClick={() => setShowHeatmap(v => !v)}
+              title={showHeatmap ? 'Hide health heatmap' : 'Show health heatmap'}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors ${
+                showHeatmap
+                  ? 'border-orange-500 text-orange-300 bg-orange-950/40'
+                  : 'border-[#2a3045] text-gray-400 hover:text-white hover:border-gray-500'
+              }`}
+            >
+              {heatmapLoading ? (
+                <svg className="w-3.5 h-3.5 animate-spin" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+                  <path d="M8 2a6 6 0 1 0 0 12A6 6 0 0 0 8 2z" strokeOpacity="0.3"/>
+                  <path d="M14 8a6 6 0 0 0-6-6" strokeLinecap="round"/>
+                </svg>
+              ) : (
+                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-3.5 h-3.5">
+                  <rect x="2" y="2" width="12" height="12" rx="1"/>
+                  <path d="M2 7h3l2 5 2-8 2 3h3" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+              )}
+              Heatmap
+            </button>
+
             <button
               onClick={() => field && exportReport(field, zones, recommendations)}
               disabled={!field}
@@ -279,12 +318,35 @@ export default function DashboardPage() {
         <div className="flex-1 relative">
           {field ? (
             <FieldMap center={center} zoom={14}>
+              <HeatmapLayer heatmap={heatmap} visible={showHeatmap} />
               <ZoneLayer fieldId={field_id} onZoneSelect={setSelectedZone} selectedZoneId={selectedZone?.id} />
               <ZoneTooltip fieldId={field_id} />
               <UrgencyPulse recommendations={recommendations} zones={zones} />
             </FieldMap>
           ) : (
             <div className="w-full h-full bg-gray-900 animate-pulse" />
+          )}
+
+          {/* Heatmap color legend */}
+          {showHeatmap && (
+            <div className="absolute bottom-4 left-4 z-10 bg-gray-950/90 border border-[#2a3045] rounded-lg px-3 py-2 text-[10px] text-gray-300">
+              <div className="font-semibold text-gray-200 mb-1.5">Crop Health Score</div>
+              <div className="flex items-center gap-1.5 mb-1">
+                <div className="w-24 h-2.5 rounded-full" style={{ background: 'linear-gradient(to right, #ef4444, #f59e0b, #84cc16, #16a34a)' }} />
+              </div>
+              <div className="flex justify-between w-24 text-gray-400">
+                <span>Critical</span>
+                <span>Healthy</span>
+              </div>
+              <div className="mt-1.5 text-gray-500">
+                NDVI 35% · NDRE 30% · CIg 20% · NDWI 15%
+              </div>
+              {heatmap && (
+                <div className="mt-1 text-gray-500">
+                  Source: {heatmap.source === 'sentinel2' ? 'Sentinel-2' : 'Synthetic'}
+                </div>
+              )}
+            </div>
           )}
         </div>
 
@@ -306,8 +368,8 @@ export default function DashboardPage() {
             )}
           </div>
 
-          {/* Fixed bottom sparklines */}
-          <ZoneSparklines zones={zones} />
+          {/* Fixed bottom zone chips */}
+          <ZoneSparklines zones={zones} onZoneSelect={setSelectedZone} selectedZoneId={selectedZone?.id} />
         </div>
       </div>
 

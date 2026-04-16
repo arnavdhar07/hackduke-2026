@@ -119,14 +119,18 @@ async def upsert_zones_and_scores(
 
                 await conn.execute(
                     """
-                    INSERT INTO ndvi_timeseries (id, zone_id, ndvi, ndwi, ndre, captured_at)
-                    VALUES ($1, $2, $3, $4, $5, $6)
+                    INSERT INTO ndvi_timeseries (id, zone_id, ndvi, ndwi, ndre, evi, gndvi, savi, cig, captured_at)
+                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
                     """,
                     uuid.uuid4(),
                     zone_id,
                     scores["ndvi"],
                     scores["ndwi"],
                     scores["ndre"],
+                    scores.get("evi", 0.0),
+                    scores.get("gndvi", 0.0),
+                    scores.get("savi", 0.0),
+                    scores.get("cig", 0.0),
                     captured_at,
                 )
 

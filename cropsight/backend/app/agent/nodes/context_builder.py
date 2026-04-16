@@ -48,11 +48,14 @@ _SQL_ZONES_LATEST = """
         n.ndvi,
         n.ndwi,
         n.ndre,
+        COALESCE(n.gndvi, 0.0) AS gndvi,
+        COALESCE(n.savi,  0.0) AS savi,
+        COALESCE(n.cig,   0.0) AS cig,
         n.captured_at,
         ST_Area(ST_Transform(z.polygon, 3857)) / 4046.86 AS zone_area_acres
     FROM zones z
     JOIN LATERAL (
-        SELECT ndvi, ndwi, ndre, captured_at
+        SELECT ndvi, ndwi, ndre, gndvi, savi, cig, captured_at
         FROM ndvi_timeseries
         WHERE zone_id = z.id
         ORDER BY captured_at DESC
@@ -88,6 +91,35 @@ async def _fetch_weather(lat: float, lon: float) -> dict:
         resp = await client.get(url, params=params)
         resp.raise_for_status()
         return resp.json()
+
+
+# ---------------------------------------------------------------------------
+# Growth stage lookup (days since planting → stage name)
+# ---------------------------------------------------------------------------
+
+_GROWTH_STAGES: dict[str, list[tuple[int, int, str]]] = {
+    "corn":     [(0,10,"germination"),(10,35,"vegetative"),(35,65,"tasseling"),(65,100,"grain_fill"),(100,999,"maturity")],
+    "maize":    [(0,10,"germination"),(10,35,"vegetative"),(35,65,"tasseling"),(65,100,"grain_fill"),(100,999,"maturity")],
+    "wheat":    [(0,20,"germination"),(20,80,"tillering"),(80,120,"heading"),(120,160,"grain_fill"),(160,999,"maturity")],
+    "soybeans": [(0,15,"germination"),(15,45,"vegetative"),(45,80,"flowering"),(80,120,"pod_fill"),(120,999,"maturity")],
+    "soy":      [(0,15,"germination"),(15,45,"vegetative"),(45,80,"flowering"),(80,120,"pod_fill"),(120,999,"maturity")],
+    "potato":   [(0,20,"emergence"),(20,45,"vegetative"),(45,90,"tuber_initiation"),(90,120,"bulking"),(120,999,"maturity")],
+    "potatoes": [(0,20,"emergence"),(20,45,"vegetative"),(45,90,"tuber_initiation"),(90,120,"bulking"),(120,999,"maturity")],
+    "rice":     [(0,20,"germination"),(20,60,"vegetative"),(60,90,"booting"),(90,120,"heading"),(120,999,"ripening")],
+    "cotton":   [(0,15,"germination"),(15,50,"vegetative"),(50,90,"squaring"),(90,130,"boll_fill"),(130,999,"maturity")],
+    "barley":   [(0,15,"germination"),(15,60,"tillering"),(60,90,"heading"),(90,120,"grain_fill"),(120,999,"maturity")],
+    # Default for unknown crop types
+    "default":  [(0,15,"germination"),(15,60,"vegetative"),(60,90,"reproductive"),(90,130,"grain_fill"),(130,999,"maturity")],
+}
+
+
+def _estimate_growth_stage(crop_type: str, days_since_planting: int) -> str:
+    """Return the current growth stage name for a crop given days since planting."""
+    stages = _GROWTH_STAGES.get(crop_type.lower().strip(), _GROWTH_STAGES["default"])
+    for start, end, stage_name in stages:
+        if start <= days_since_planting < end:
+            return stage_name
+    return stages[-1][2]  # maturity fallback
 
 
 # ---------------------------------------------------------------------------
@@ -188,6 +220,9 @@ async def context_builder(state: AgentState) -> AgentState:
                     ndwi=float(row["ndwi"]) if row["ndwi"] is not None else 0.0,
                     ndre=float(row["ndre"]) if row["ndre"] is not None else 0.0,
                     evi=evi,
+                    gndvi=float(row["gndvi"]) if row["gndvi"] is not None else 0.0,
+                    savi=float(row["savi"]) if row["savi"] is not None else 0.0,
+                    cig=float(row["cig"]) if row["cig"] is not None else 0.0,
                     zone_area_acres=round(zone_area_acres, 2),
                     ndvi_delta=ndvi_delta,
                     captured_at=captured_at_str,
@@ -196,10 +231,13 @@ async def context_builder(state: AgentState) -> AgentState:
         if _own_pool:
             await conn_pool.close()
 
-    # 4. Weather forecast
+    # 4. Growth stage estimation
+    growth_stage: str = _estimate_growth_stage(crop_type, days_since_planting)
+
+    # 5. Weather forecast
     weather_forecast: dict = await _fetch_weather(field_lat, field_lon)
 
-    # 5. Compute days_since_satellite_pass from most recent zone observation
+    # 6. Compute days_since_satellite_pass from most recent zone observation
     latest_captured = max((z["captured_at"] for z in zones), default=None)
     if latest_captured:
         latest_dt = datetime.fromisoformat(latest_captured.replace("Z", "+00:00"))
@@ -207,7 +245,7 @@ async def context_builder(state: AgentState) -> AgentState:
     else:
         days_since_satellite_pass = 999
 
-    # 6. Trace entry — inputs/outputs must be JSON-serializable
+    # 7. Trace entry — inputs/outputs must be JSON-serializable
     trace_entry: dict = {
         "node_name": "context_builder",
         "inputs": {"field_id": field_id},
@@ -217,6 +255,7 @@ async def context_builder(state: AgentState) -> AgentState:
             "crop_type": crop_type,
             "planting_date": planting_date_str,
             "days_since_planting": days_since_planting,
+            "growth_stage": growth_stage,
             "days_since_satellite_pass": days_since_satellite_pass,
             "zone_count": len(zones),
             "weather_days": len(weather_forecast.get("daily", {}).get("time", [])),
@@ -232,6 +271,7 @@ async def context_builder(state: AgentState) -> AgentState:
         "planting_date": planting_date_str,
         "days_since_planting": days_since_planting,
         "days_since_satellite_pass": days_since_satellite_pass,
+        "growth_stage": growth_stage,
         "zones": zones,
         "weather_forecast": weather_forecast,
         "reasoning_trace": [*state.get("reasoning_trace", []), trace_entry],

@@ -23,9 +23,15 @@ dependencies = [
     "redis[asyncio]>=5.0",
     "celery[redis]>=5.3",
     # AI / Agent (Person 2)
-    "anthropic>=0.40.0",
+    "openai>=1.0",
     "langgraph>=0.2.55",
     "langchain-core>=0.3.0",
+    # SAM3 field detection: Hugging Face Sam3Tracker (point prompts). Checkpoint: facebook/sam3
+    # Optional zone pipeline: native `sam3` package — pip install 'git+https://github.com/facebookresearch/sam3.git'
+    "huggingface_hub>=0.27.0",
+    "transformers>=5.0.0",
+    "torch>=2.0",
+    "pillow>=10.0",
     # HTTP client (Open-Meteo)
     "httpx>=0.27",
     # Raster / geospatial (Person 3)
@@ -42,7 +48,7 @@ dependencies = [
 packages = ["app", "pipeline"]
 
 [project.optional-dependencies]
-# Install on Linux workers that have the SAM3 checkpoint available
+# Native Meta sam3 (automatic mask generation in segmentation.py). Often needs CUDA/triton.
 ml = ["sam3"]
 
 [dependency-groups]

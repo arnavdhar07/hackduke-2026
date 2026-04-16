@@ -1,14 +1,16 @@
 """action_generator node — fourth node in the harvest-agent pipeline.
 
-Calls Claude with tool_use (forced structured output) to generate prioritized
-farm action recommendations for each zone, given its classification and urgency
-status produced by the previous nodes.
+Calls DeepSeek (OpenAI-compatible API) with function calling (forced structured
+output) to generate prioritized farm action recommendations for each zone, given
+its classification and urgency status produced by the previous nodes.
 
 Output: fills state["recommendations"] with List[RecommendationOutput].
 """
 from __future__ import annotations
 
-import anthropic
+import json
+
+from openai import OpenAI
 
 from app.agent.state import AgentState, RecommendationOutput, ZoneClassification
 from app.config import settings
@@ -20,70 +22,67 @@ CROP_BASE_YIELDS: dict[str, float] = {
     "wheat": 47.0,
     "soy": 50.0,
     "soybeans": 50.0,
-    "cotton": 0.0,   # weight-based, skip bu estimation
-    "rice": 0.0,     # weight-based, skip bu estimation
+    "cotton": 0.0,
+    "rice": 0.0,
 }
 
 
-_TOOL_SCHEMA = {
-    "name": "generate_actions",
-    "description": (
-        "Generate prioritized farm actions for each crop zone based on harvest "
-        "readiness classification and weather risk assessment."
-    ),
-    "input_schema": {
-        "type": "object",
-        "properties": {
-            "recommendations": {
-                "type": "array",
-                "items": {
-                    "type": "object",
-                    "properties": {
-                        "zone_id": {"type": "string"},
-                        "zone_label": {"type": "string"},
-                        "action_type": {
-                            "type": "string",
-                            "enum": ["harvest", "irrigate", "monitor", "inspect"],
+_DEEPSEEK_TOOL = {
+    "type": "function",
+    "function": {
+        "name": "generate_actions",
+        "description": (
+            "Generate prioritized farm actions for each crop zone based on harvest "
+            "readiness classification and weather risk assessment."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "recommendations": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "zone_id": {"type": "string"},
+                            "zone_label": {"type": "string"},
+                            "action_type": {
+                                "type": "string",
+                                "enum": ["harvest", "irrigate", "monitor", "inspect", "fertilize", "spray", "scout", "soil_sample"],
+                            },
+                            "urgency": {
+                                "type": "string",
+                                "enum": ["low", "medium", "high", "critical"],
+                            },
+                            "reason": {
+                                "type": "string",
+                                "description": (
+                                    "Exactly 2 plain English sentences explaining why this "
+                                    "action is recommended for this zone right now."
+                                ),
+                            },
+                            "confidence": {
+                                "type": "number",
+                                "description": "Certainty as a float 0.0–1.0",
+                            },
+                            "estimated_yield_bushels": {
+                                "type": "number",
+                                "description": (
+                                    "Estimated yield in bushels for this zone. "
+                                    "Base yields: corn=175, wheat=47, soy=50, other crops=60 bu/acre equivalent. "
+                                    "Multiply by zone_area_acres × (0.5 + ndvi/200). "
+                                    "Round to nearest integer. Use 0 for cotton/rice."
+                                ),
+                            },
                         },
-                        "urgency": {
-                            "type": "string",
-                            "enum": ["low", "medium", "high", "critical"],
-                        },
-                        "reason": {
-                            "type": "string",
-                            "description": (
-                                "Exactly 2 plain English sentences explaining why this "
-                                "action is recommended for this zone right now."
-                            ),
-                        },
-                        "confidence": {
-                            "type": "number",
-                            "minimum": 0.0,
-                            "maximum": 1.0,
-                        },
-                        "estimated_yield_bushels": {
-                            "type": "number",
-                            "description": (
-                                "Estimated yield in bushels for this zone. "
-                                "Base yields: corn=175, wheat=47, soy=50, other crops=60 bu/acre equivalent. "
-                                "Multiply by zone_area_acres × (0.5 + ndvi/200). "
-                                "Round to nearest integer. Adjust reasoning to match the specific crop type."
-                            ),
-                        },
+                        "required": [
+                            "zone_id", "zone_label", "action_type", "urgency",
+                            "reason", "confidence", "estimated_yield_bushels",
+                        ],
                     },
-                    "required": [
-                        "zone_id",
-                        "zone_label",
-                        "action_type",
-                        "urgency",
-                        "reason",
-                        "confidence",
-                        "estimated_yield_bushels",
-                    ],
-                },
-            }
+                }
+            },
+            "required": ["recommendations"],
         },
-        "required": ["recommendations"],
     },
 }
 
@@ -93,24 +92,21 @@ def _build_user_message(state: AgentState) -> str:
     classifications: list[ZoneClassification] = state["zone_classifications"]
     crop_type: str = state["crop_type"]
     days: int = state["days_since_planting"]
+    growth_stage: str = state.get("growth_stage", "unknown")
 
-    # Lookup base yield for this crop
     base_yield_per_acre = CROP_BASE_YIELDS.get(crop_type.lower(), 0.0)
-    # For unknown crops, use a generic moderate yield to allow the AI to reason
     if base_yield_per_acre == 0.0 and crop_type.lower() not in ("cotton", "rice"):
-        base_yield_per_acre = 60.0  # generic fallback (bu/acre equivalent)
+        base_yield_per_acre = 60.0
 
-    # Build a zone_area lookup from zones list
     zone_area_by_id: dict[str, float] = {
         z["zone_id"]: z.get("zone_area_acres", 0.0)
         for z in state.get("zones", [])
     }
-    zone_ndvi_by_id: dict[str, float] = {
-        z["zone_id"]: z.get("ndvi", 0.0)
+    zone_scores_by_id: dict[str, dict] = {
+        z["zone_id"]: z
         for z in state.get("zones", [])
     }
 
-    # Include a concise weather summary
     daily: dict = state.get("weather_forecast", {}).get("daily", {})
     precip_list: list = daily.get("precipitation_sum", [])
     temp_list: list = daily.get("temperature_2m_min", [])
@@ -121,15 +117,14 @@ def _build_user_message(state: AgentState) -> str:
         p = precip_list[i] if i < len(precip_list) else "n/a"
         t = temp_list[i] if i < len(temp_list) else "n/a"
         day = time_list[i]
-        weather_lines.append(
-            f"    {day}: precip={p} mm, min_temp={t} °C"
-        )
+        weather_lines.append(f"    {day}: precip={p} mm, min_temp={t} °C")
 
     lines: list[str] = [
         "You are a senior agronomist generating actionable farm recommendations.",
         "",
         f"Crop type       : {crop_type} (base yield: {base_yield_per_acre:.0f} bu/acre)",
         f"Days planted    : {days}",
+        f"Growth stage    : {growth_stage}",
         "",
         "\n".join(weather_lines),
         "",
@@ -138,7 +133,7 @@ def _build_user_message(state: AgentState) -> str:
 
     for c in classifications:
         zone_area = zone_area_by_id.get(c["zone_id"], 0.0)
-        zone_ndvi = zone_ndvi_by_id.get(c["zone_id"], 0.0)
+        zs = zone_scores_by_id.get(c["zone_id"], {})
         lines += [
             "",
             f"  Zone ID        : {c['zone_id']}",
@@ -150,15 +145,27 @@ def _build_user_message(state: AgentState) -> str:
             f"  Days remaining : {c['days_remaining']}",
             f"  Health rating  : {c['crop_health_rating']}/10",
             f"  Zone area      : {zone_area:.1f} acres",
-            f"  NDVI           : {zone_ndvi:.1f}/100",
+            f"  NDVI           : {zs.get('ndvi', 0.0):.1f}/100  (greenness/biomass)",
+            f"  EVI            : {zs.get('evi', 0.0):.1f}/100   (dense-canopy vegetation)",
+            f"  NDWI           : {zs.get('ndwi', 0.0):.1f}/100  (water stress)",
+            f"  NDRE           : {zs.get('ndre', 0.0):.1f}/100  (early chlorophyll stress)",
+            f"  GNDVI          : {zs.get('gndvi', 0.0):.1f}/100  (late-season chlorophyll)",
+            f"  SAVI           : {zs.get('savi', 0.0):.1f}/100  (soil-adjusted VI)",
+            f"  CIg            : {zs.get('cig', 0.0):.1f}/100  (nitrogen proxy; <40 = deficiency)",
+            f"  NDVI Δ7d       : {zs.get('ndvi_delta', 0.0):+.1f}",
         ]
 
     lines += [
         "",
         "Instructions:",
-        "  - action_type options: harvest | irrigate | monitor | inspect",
+        "  - action_type options: harvest | irrigate | monitor | inspect | fertilize | spray | scout | soil_sample",
+        "    fertilize: when CIg < 40 or NDRE < 45 (nitrogen/chlorophyll deficiency)",
+        "    spray: when growth stage allows (not germination/maturity) and stress or disease risk is present",
+        "    scout: when NDRE drops but NDVI holds (early stress not yet visible in biomass)",
+        "    soil_sample: when persistent low CIg/NDRE with no weather explanation",
+        "  - Do NOT recommend 'harvest' if growth_stage is germination or vegetative (too early).",
         "  - urgency must match the zone's urgency from the classification above",
-        "  - reason must be exactly 2 plain English sentences",
+        "  - reason must be exactly 2 plain English sentences referencing specific index values",
         "  - confidence: your certainty as a float 0.0–1.0",
         f"  - estimated_yield_bushels: base {base_yield_per_acre:.0f} bu/acre × zone_area_acres × (0.5 + ndvi/200)",
         "    Round to nearest integer. Use 0 for cotton/rice.",
@@ -169,52 +176,45 @@ def _build_user_message(state: AgentState) -> str:
 
 
 async def action_generator(state: AgentState) -> AgentState:
-    """Generate farm action recommendations using Claude tool_use."""
-    client = anthropic.Anthropic(api_key=settings.ANTHROPIC_API_KEY)
+    """Generate farm action recommendations using DeepSeek function calling."""
+    client = OpenAI(
+        api_key=settings.DEEPSEEK_API_KEY,
+        base_url="https://api.deepseek.com/v1",
+    )
 
     user_message = _build_user_message(state)
 
-    response = client.messages.create(
-        model="claude-sonnet-4-20250514",
-        max_tokens=4096,
-        tools=[_TOOL_SCHEMA],
-        tool_choice={"type": "tool", "name": "generate_actions"},
+    response = client.chat.completions.create(
+        model="deepseek-chat",
         messages=[{"role": "user", "content": user_message}],
+        tools=[_DEEPSEEK_TOOL],
+        tool_choice={"type": "function", "function": {"name": "generate_actions"}},
     )
 
-    # tool_choice forces the first content block to be a tool_use block
-    result: dict = response.content[0].input  # always a dict, always parseable
+    tool_call = response.choices[0].message.tool_calls[0]
+    result: dict = json.loads(tool_call.function.arguments)
 
-    raw_recommendations: list[dict] = result.get("recommendations", [])
+    raw_recommendations: list[dict] = list(result.get("recommendations", []))
 
-    # Use state["zones"] (from DB) as the authoritative source for zone_id + label.
-    # zone_classifications has DB-correct zone_ids (fixed in zone_classifier),
-    # but we also build from state["zones"] as a double-fallback.
     db_zones = state["zones"]
-    # Primary lookup: by label from zone_classifications (already DB-authoritative)
     label_to_zone_id: dict[str, str] = {
         c["label"]: c["zone_id"]
         for c in state["zone_classifications"]
     }
-    # Secondary lookup: by label from raw DB zones list
     label_to_zone_id.update({z["label"]: z["zone_id"] for z in db_zones})
 
-    # Coerce to typed RecommendationOutput dicts (JSON-serializable)
-    # Always override zone_id from state — never trust Claude's echoed value
     recommendations: list[RecommendationOutput] = []
     for i, r in enumerate(raw_recommendations):
-        claude_label = str(r.get("zone_label", ""))
-        # Match by label; fall back to positional index into db_zones
-        zone_id = label_to_zone_id.get(claude_label)
-        db_label = claude_label
+        r = dict(r)
+        llm_label = str(r.get("zone_label", ""))
+        zone_id = label_to_zone_id.get(llm_label)
+        db_label = llm_label
         if zone_id is None and i < len(db_zones):
             zone_id = db_zones[i]["zone_id"]
             db_label = db_zones[i]["label"]
         if zone_id is None:
-            continue  # no zone to map to — skip rather than write bad UUID
+            continue
 
-        # Carry forward days_remaining, crop_health_rating, crop_health_summary
-        # from the matching ZoneClassification
         matching_class = next(
             (c for c in state["zone_classifications"] if c["zone_id"] == zone_id),
             None,

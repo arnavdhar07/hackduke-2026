@@ -1,4 +1,4 @@
-# Harvest
+# CropSight
 
 **Agentic precision agriculture platform that gives farmers zone-level, crop-specific field intelligence from real satellite imagery and AI-driven recommendations.**
 
@@ -8,13 +8,13 @@
 
 Small and mid-scale farmers lose significant yield every season not because of bad farming, but because of delayed or missing information. Knowing *which part* of a field is stressed, *when exactly* the harvest window opens, and *what to do right now* requires either expensive agronomist consultations or manual scouting that takes days. By that time, the optimal harvest window has closed, an irrigation deficit has compounded, or a disease has spread across a zone.
 
-Harvest solves this by autonomously processing satellite imagery and running a multi-step AI reasoning pipeline to deliver zone-level, urgency-ranked action recommendations — accessible through an interactive map dashboard, refreshed every time a farmer opens their field.
+CropSight solves this by autonomously processing satellite imagery and running a multi-step AI reasoning pipeline to deliver zone-level, urgency-ranked action recommendations — accessible through an interactive map dashboard, refreshed every time a farmer opens their field.
 
 ---
 
-## What Harvest Does
+## What CropSight Does
 
-Harvest lets a farmer draw their field boundary on an interactive map, enter their crop type and planting date, and immediately receive:
+CropSight lets a farmer draw their field boundary on an interactive map, enter their crop type and planting date, and immediately receive:
 
 - A 2×2 zone breakdown of the field with NDVI, NDWI, and NDRE health scores derived from real Sentinel-2 satellite imagery
 - AI-generated harvest readiness classifications per zone (not_ready / approaching / harvest_now / past_peak / stressed)
@@ -217,15 +217,15 @@ agent_traces     — full LangGraph reasoning trace as JSONB per agent run
 # Prerequisites: Docker, Node.js 20+, Python 3.11+, uv
 
 # 1. Copy environment variables
-cp harvest/backend/.env.example harvest/backend/.env
+cp cropsight/backend/.env.example cropsight/backend/.env
 # Fill in: DATABASE_URL, ANTHROPIC_API_KEY, MAPBOX_TOKEN
 
 # 2. Start backend services (Redis + FastAPI + Celery)
-cd harvest
+cd cropsight
 docker compose up
 
 # 3. Start frontend
-cd harvest/frontend
+cd cropsight/frontend
 pnpm install
 pnpm dev
 
@@ -245,5 +245,3 @@ pnpm dev
 | `NEXT_PUBLIC_API_BASE` | Backend API base URL |
 
 ---
-
-Built for HackDuke 2026.

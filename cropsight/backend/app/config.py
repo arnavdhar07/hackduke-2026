@@ -16,7 +16,11 @@ class Settings(BaseSettings):
     REDIS_URL: str = "redis://localhost:6379/0"
 
     # ── AI Agent (Person 2) ───────────────────────────────────────────────────
-    ANTHROPIC_API_KEY: str = ""
+    GEMINI_API_KEY: str = ""
+    DEEPSEEK_API_KEY: str = ""
+
+    # ── HuggingFace (SAM3 model download) ────────────────────────────────────
+    HF_TOKEN: str = ""
 
     # ── Satellite pipeline (Person 3) ─────────────────────────────────────────
     CDSE_CLIENT_ID: str = ""

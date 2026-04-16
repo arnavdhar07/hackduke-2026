@@ -46,6 +46,10 @@ class ZoneScore(BaseModel):
     ndvi: float
     ndwi: float
     ndre: float
+    evi: float = 0.0
+    gndvi: float = 0.0
+    savi: float = 0.0
+    cig: float = 0.0
     captured_at: datetime
 
 

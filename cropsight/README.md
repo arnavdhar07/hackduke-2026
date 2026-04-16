@@ -245,5 +245,3 @@ pnpm dev
 | `NEXT_PUBLIC_API_BASE` | Backend API base URL |
 
 ---
-
-Built for HackDuke 2026.

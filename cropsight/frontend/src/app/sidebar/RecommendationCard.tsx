@@ -15,6 +15,10 @@ const ACTION_COLOR: Record<Recommendation['action_type'], string> = {
   irrigate: '#3b82f6',
   monitor: '#6b7280',
   inspect: '#f59e0b',
+  fertilize: '#a855f7',
+  spray: '#06b6d4',
+  scout: '#84cc16',
+  soil_sample: '#78716c',
 };
 
 // Left border accent color per urgency
@@ -155,6 +159,42 @@ export default function RecommendationCard({
         </Progress>
         <span className="text-xs text-gray-400 shrink-0 text-right">{Math.round(rec.confidence * 100)}%</span>
       </div>
+
+      {/* Data signals — all 7 metrics that drove this recommendation */}
+      {zone && (
+        <div className="rounded-lg px-3 py-2 border border-[#2a3045]" style={{ backgroundColor: '#12161f' }}>
+          <p className="text-[9px] text-gray-600 uppercase tracking-widest mb-2">Satellite signals</p>
+          <div className="grid grid-cols-7 gap-1">
+            {(
+              [
+                { k: 'ndvi', l: 'NDVI' },
+                { k: 'ndwi', l: 'NDWI' },
+                { k: 'ndre', l: 'NDRE' },
+                { k: 'evi',  l: 'EVI'  },
+                { k: 'gndvi',l: 'GNDVI'},
+                { k: 'savi', l: 'SAVI' },
+                { k: 'cig',  l: 'CIg'  },
+              ] as { k: keyof typeof zone.latest_scores; l: string }[]
+            ).map(({ k, l }) => {
+              const v = Math.round((zone.latest_scores[k] as number) ?? 0);
+              const c = v >= 65 ? '#16a34a' : v >= 45 ? '#84cc16' : v >= 30 ? '#f59e0b' : '#ef4444';
+              return (
+                <div key={k} className="flex flex-col items-center gap-0.5" title={`${l}: ${v}/100`}>
+                  {/* Mini vertical bar */}
+                  <div className="w-full h-8 rounded bg-gray-800 relative overflow-hidden">
+                    <div
+                      className="absolute bottom-0 left-0 right-0 rounded transition-all"
+                      style={{ height: `${v}%`, backgroundColor: c, opacity: 0.85 }}
+                    />
+                  </div>
+                  <span className="text-[8px] text-gray-500 leading-none">{l}</span>
+                  <span className="text-[8px] font-bold leading-none" style={{ color: c }}>{v}</span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Yield estimate */}
       {rec.estimated_yield_bushels > 0 && (

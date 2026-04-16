@@ -1,16 +1,51 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import uuid
 from datetime import date, datetime, timezone
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException
+from pydantic import BaseModel
 
 from app import database
 from app.models.field import FieldCreate, FieldResponse, GeoJSON
 from app.synthetic_pipeline import run_synthetic_pipeline
 
 router = APIRouter(prefix="/fields", tags=["fields"])
+
+
+# ---------------------------------------------------------------------------
+# POST /fields/detect — auto-detect field boundary from a lat/lng point
+# ---------------------------------------------------------------------------
+
+class DetectRequest(BaseModel):
+    lat: float
+    lng: float
+
+
+class DetectResponse(BaseModel):
+    polygon: dict
+    confidence: float
+    source: str
+
+
+@router.post("/detect", response_model=DetectResponse)
+async def detect_field(body: DetectRequest) -> DetectResponse:
+    """Detect a field boundary from a single lat/lng point using SAM3."""
+    import asyncio
+    from pipeline.field_detector import detect_field_from_point
+
+    # field_detector is CPU-bound; run in a thread so we don't block the event loop
+    loop = asyncio.get_event_loop()
+    result = await loop.run_in_executor(
+        None, detect_field_from_point, body.lat, body.lng
+    )
+    return DetectResponse(
+        polygon=result["polygon"],
+        confidence=result["confidence"],
+        source=result["source"],
+    )
 
 
 # -----------------------------------------------------------------
@@ -146,6 +181,81 @@ async def trigger_analysis(field_id: uuid.UUID, background_tasks: BackgroundTask
         raise HTTPException(status_code=404, detail="Field not found")
     background_tasks.add_task(run_synthetic_pipeline, str(field_id))
     return {"status": "analysis_started", "field_id": str(field_id)}
+
+
+# ---------------------------------------------------------------------------
+# GET /fields/{field_id}/heatmap — crop health raster overlay
+# ---------------------------------------------------------------------------
+
+class HeatmapResponse(BaseModel):
+    image_png_b64: str
+    bounds: list[float]   # [min_lng, min_lat, max_lng, max_lat]
+    source: str           # "synthetic" | "sentinel2"
+
+
+@router.get("/{field_id}/heatmap", response_model=HeatmapResponse)
+async def get_field_heatmap(field_id: uuid.UUID) -> HeatmapResponse:
+    """Return a base64 RGBA PNG heatmap of crop health for use as a Mapbox image overlay."""
+    field_id_str = str(field_id)
+
+    # ── Redis cache ──────────────────────────────────────────────────────────
+    try:
+        from app.redis import get_redis
+        redis = get_redis()
+        cache_key = f"heatmap:{field_id_str}"
+        cached = await redis.get(cache_key)
+        if cached:
+            import json as _json
+            return HeatmapResponse(**_json.loads(cached))
+    except RuntimeError:
+        redis = None
+        cache_key = None
+
+    # ── Fetch field bbox + polygon ───────────────────────────────────────────
+    pool = await database.get_pool()
+    row = await pool.fetchrow(
+        """
+        SELECT
+            ST_XMin(ST_Envelope(polygon)) AS min_lng,
+            ST_XMax(ST_Envelope(polygon)) AS max_lng,
+            ST_YMin(ST_Envelope(polygon)) AS min_lat,
+            ST_YMax(ST_Envelope(polygon)) AS max_lat,
+            ST_AsText(polygon) AS polygon_wkt
+        FROM fields WHERE id = $1
+        """,
+        field_id,
+    )
+    if row is None:
+        raise HTTPException(status_code=404, detail="Field not found")
+
+    bbox = (
+        float(row["min_lng"]),
+        float(row["min_lat"]),
+        float(row["max_lng"]),
+        float(row["max_lat"]),
+    )
+    polygon_wkt: str = row["polygon_wkt"]
+
+    # ── Generate heatmap (CPU-bound → thread executor) ───────────────────────
+    from pipeline.heatmap_generator import generate_synthetic_heatmap
+
+    result = await asyncio.get_event_loop().run_in_executor(
+        None,
+        generate_synthetic_heatmap,
+        field_id_str,
+        polygon_wkt,
+        bbox,
+    )
+
+    # ── Cache for 1 hour ─────────────────────────────────────────────────────
+    if redis is not None and cache_key is not None:
+        try:
+            import json as _json
+            await redis.setex(cache_key, 3600, _json.dumps(result))
+        except Exception:
+            pass
+
+    return HeatmapResponse(**result)
 
 
 # ---------------------------------------------------------------------------
