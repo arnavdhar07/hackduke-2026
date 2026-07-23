@@ -244,4 +244,11 @@ pnpm dev
 | `NEXT_PUBLIC_MAPBOX_TOKEN` | Mapbox public access token |
 | `NEXT_PUBLIC_API_BASE` | Backend API base URL |
 
+## Team
+
+Built at HackDuke 2026 by:
+
+- **Arnav Dhar** ([@arnavdhar07](https://github.com/arnavdhar07)) — frontend, interactive map dashboard
+- **Aaditya** ([@Aaditya-brrt](https://github.com/Aaditya-brrt)) — backend, satellite pipeline, AI agent
+
 ---
