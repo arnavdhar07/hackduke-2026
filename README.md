@@ -248,9 +248,10 @@ pnpm dev
 
 ## Team
 
-Built at HackDuke 2026 by:
+🏆 **1st place, HackDuke 2026.** Built by team ReHarvestAI:
 
-- **Arnav Dhar** ([@arnavdhar07](https://github.com/arnavdhar07)) — frontend, interactive map dashboard
-- **Aaditya** ([@Aaditya-brrt](https://github.com/Aaditya-brrt)) — backend, satellite pipeline, AI agent
+- **Arnav Dhar** ([@arnavdhar07](https://github.com/arnavdhar07)): frontend and interactive map dashboard
+- **Aaditya** ([@Aaditya-brrt](https://github.com/Aaditya-brrt)): backend, satellite pipeline, and AI agent
+- **Lex Gu**: database schema, migrations, and backend models
 
 ---
