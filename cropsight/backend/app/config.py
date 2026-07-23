@@ -4,7 +4,7 @@ from pydantic_settings import BaseSettings
 
 # Walk up from backend/app/config.py to find .env at the project root.
 _HERE = Path(__file__).resolve().parent        # backend/app/
-_ENV_FILE = _HERE.parent.parent / ".env"       # reharvestai/.env
+_ENV_FILE = _HERE.parent.parent / ".env"       # cropsight/.env (gitignored)
 
 
 class Settings(BaseSettings):
