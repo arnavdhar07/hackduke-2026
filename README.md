@@ -1,4 +1,6 @@
-# CropSight
+# Harvest
+
+*Built as CropSight by team ReHarvestAI at HackDuke 2026 · 🏆 1st place.*
 
 **Agentic precision agriculture platform that gives farmers zone-level, crop-specific field intelligence from real satellite imagery and AI-driven recommendations.**
 
